@@ -30,9 +30,9 @@ if not docs:
 data = []
 for doc in docs:
     d = doc.to_dict()
+    # Only include responses that are NOT info type
     for r in d.get("Responses", []):
-        # Only include responses that are NOT info type
-        if r.get("Type") != "info":
+        if r.get("Type") != "info":  # This filters out info type responses
             data.append({
                 "Name": d.get("Name"),
                 "Roll": d.get("Roll"),
@@ -88,16 +88,6 @@ div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !import
     margin-bottom:8px;
     display: block;
 }
-
-.back-to-top {
-    position: fixed; bottom: 40px; right: 40px;
-    background-color: #007bff; color: white;
-    border: none; padding: 10px 16px;
-    border-radius: 8px; font-weight: 600;
-    cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    z-index: 9999;
-}
-.back-to-top:hover { background-color: #0056b3; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -107,19 +97,19 @@ sections = student_df["Section"].unique().tolist()
 grand_total = 0
 grand_max = 0
 
+# CSV files for loading info content
+section_files = {
+    "Aptitude Test": "aptitude.csv",
+    "Adaptability & Learning": "adaptability_learning.csv", 
+    "Communication Skills - Objective": "communcation_skills_objective.csv",
+    "Communication Skills - Descriptive": "communcation_skills_descriptive.csv",
+}
+
 for section in sections:
     sec_df = student_df[student_df["Section"] == section]
     st.markdown(f"## 🧾 {section}")
-    
-    # Load the original CSV to get info content for this section
-    section_files = {
-        "Aptitude Test": "aptitude.csv",
-        "Adaptability & Learning": "adaptability_learning.csv", 
-        "Communication Skills - Objective": "communcation_skills_objective.csv",
-        "Communication Skills - Descriptive": "communcation_skills_descriptive.csv",
-    }
-    
-    # Display info content from CSV
+
+    # Display info content from CSV (reading passages)
     if section in section_files:
         try:
             section_csv = pd.read_csv(section_files[section])
@@ -147,14 +137,11 @@ for section in sections:
     for idx, row in sec_df.iterrows():
         qid = row["QuestionID"]
         qtext = row["Question"]
-        qtype = row["Type"]
         response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
         prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
-        # Increment question counter
         question_counter += 1
         
-        # Layout: Question + response + marks (0/1)
         col1, col2 = st.columns([10, 2])
         with col1:
             st.markdown(
@@ -176,7 +163,6 @@ for section in sections:
 
     st.markdown(f"**Subtotal for {section}: {section_total}/{section_max_marks}**")
     st.markdown("---")
-
     grand_total += section_total
     grand_max += section_max_marks
 
