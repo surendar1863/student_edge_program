@@ -118,10 +118,32 @@ if name and roll:
 else:
     st.info("👆 Please enter your Name and Roll Number to start.")
 
-# ---------------- BACK TO TOP BUTTON ----------------
-# Add this at the very end of your code:
+# ---------------- BACK TO TOP ----------------
 st.markdown("---")
-if st.button("⬆️ Back to Top"):
-    st.rerun()
+
+# Create a custom back to top component
+def back_to_top():
+    components.html(
+        """
+        <script>
+        function scrollToTop() {
+            window.parent.document.querySelector('section.main').scrollTo(0, 0);
+        }
+        </script>
+        <button onclick="scrollToTop()" style='
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        '>⬆️ Back to Top</button>
+        """,
+        height=60
+    )
+
+back_to_top()
 
 
