@@ -30,9 +30,9 @@ if not docs:
 data = []
 for doc in docs:
     d = doc.to_dict()
-    # Only include responses that are NOT info type
     for r in d.get("Responses", []):
-        if r.get("Type") != "info":  # This filters out info type responses
+        # Only include gradable (non-info) questions
+        if r.get("Type") != "info":
             data.append({
                 "Name": d.get("Name"),
                 "Roll": d.get("Roll"),
@@ -70,24 +70,36 @@ div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !import
 
 .qtext { font-size:16px; font-weight:600; color:#111; margin-bottom:3px; }
 .qresp { font-size:15px; color:#333; margin-top:-4px; margin-bottom:4px; }
+
 .infoblock { 
     background-color:#f0f8ff; 
-    padding:15px 20px; 
+    padding:16px 20px; 
     border-left:5px solid #007bff;
-    border-radius:6px; 
-    margin-bottom:20px; 
+    border-radius:10px; 
+    margin:18px 0 20px 0; 
     font-size:16px; 
     line-height:1.6;
-    color:#333;
-    font-style: normal;
+    color:#222;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
+
 .info-title {
     font-size:18px; 
     font-weight:700; 
     color:#007bff; 
-    margin-bottom:8px;
+    margin-bottom:10px;
     display: block;
 }
+
+.back-to-top {
+    position: fixed; bottom: 40px; right: 40px;
+    background-color: #007bff; color: white;
+    border: none; padding: 10px 16px;
+    border-radius: 8px; font-weight: 600;
+    cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    z-index: 9999;
+}
+.back-to-top:hover { background-color: #0056b3; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -97,7 +109,7 @@ sections = student_df["Section"].unique().tolist()
 grand_total = 0
 grand_max = 0
 
-# CSV files for loading info content
+# Define CSVs per section
 section_files = {
     "Aptitude Test": "aptitude.csv",
     "Adaptability & Learning": "adaptability_learning.csv", 
@@ -108,33 +120,32 @@ section_files = {
 for section in sections:
     sec_df = student_df[student_df["Section"] == section]
     st.markdown(f"## 🧾 {section}")
-
-    # Display info content from CSV (reading passages)
+    
+    # ✅ Display Reading Passages for this section (info type only)
     if section in section_files:
         try:
             section_csv = pd.read_csv(section_files[section])
             info_content = section_csv[section_csv["Type"] == "info"]
-            
-            for idx, row in info_content.iterrows():
+            for _, row in info_content.iterrows():
                 qtext = row["Question"]
                 st.markdown(
                     f"""
                     <div class='infoblock'>
-                        <span class='info-title'>📘 Reading Passage</span>
+                        <span class='info-title'>📘 Read the passage and answer the questions below:</span>
                         {qtext}
                     </div>
                     """, 
                     unsafe_allow_html=True
                 )
         except Exception as e:
-            st.warning(f"Could not load info content for {section}: {e}")
+            st.warning(f"⚠️ Could not load info content for {section}: {e}")
 
+    # ✅ Display gradable questions
     section_total = 0
     section_max_marks = len(sec_df)
-    
-    # Display gradable questions with marks
     question_counter = 0
-    for idx, row in sec_df.iterrows():
+
+    for _, row in sec_df.iterrows():
         qid = row["QuestionID"]
         qtext = row["Question"]
         response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
@@ -163,6 +174,7 @@ for section in sections:
 
     st.markdown(f"**Subtotal for {section}: {section_total}/{section_max_marks}**")
     st.markdown("---")
+
     grand_total += section_total
     grand_max += section_max_marks
 
@@ -180,3 +192,8 @@ if st.button("💾 Save All Marks"):
 
 # ---------------- TOTAL MARKS ----------------
 st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_max}")
+
+# ---------------- BACK TO TOP ----------------
+st.markdown("""
+<a href="#top" class="back-to-top">⬆ Back to Top</a>
+""", unsafe_allow_html=True)
