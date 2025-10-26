@@ -1,22 +1,28 @@
 import streamlit as st
+import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
 import json
+import time
 
-# ---------------- FIREBASE INIT ----------------
+# ---------------- FIREBASE INIT - FIXED VERSION ----------------
 try:
-    # Load Firebase credentials from Streamlit Secrets
-    firebase_config = st.secrets["google_service_account"]
+    # METHOD 1: Use Streamlit secrets (recommended)
+    firebase_config = st.secrets["firebase_key"]
+    
+    # If it's stored as a string, parse it
+    if isinstance(firebase_config, str):
+        firebase_config = json.loads(firebase_config)
+        
     cred = credentials.Certificate(firebase_config)
 except Exception as e:
-    # Fallback: use local JSON file for testing
-    with open("firebase_key.json") as f:
-        cred = credentials.Certificate(json.load(f))
+    st.error(f"Firebase config error: {e}")
+    # Fallback: Stop the app since secrets should work
+    st.stop()
 
-# Initialize Firebase app once
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
-
+    
 db = firestore.client()
 
 # ---------------- PAGE CONFIG ----------------
@@ -213,4 +219,5 @@ st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_
 st.markdown("""
 <a href="#top" class="back-to-top">⬆ Back to Top</a>
 """, unsafe_allow_html=True)
+
 
