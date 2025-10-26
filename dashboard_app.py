@@ -146,64 +146,29 @@ for section in sections:
         except Exception as e:
             st.warning(f"⚠️ Could not load info content for {section}: {e}")
 
-    # ✅ Display gradable questions
-# ✅ Display gradable questions with reading passages inserted after Q20, Q26, and Q32
-section_total = 0
-section_max_marks = len(sec_df)
-question_counter = 0
+    # ✅ Display gradable questions with reading passages inserted after Q20, Q26, and Q32
+    section_total = 0
+    section_max_marks = len(sec_df)
+    question_counter = 0
 
-# Load all reading passages for this section once
-info_passages = []
-if section in section_files:
-    try:
-        section_csv = pd.read_csv(section_files[section])
-        info_passages = section_csv[section_csv["Type"] == "info"]["Question"].tolist()
-    except Exception as e:
-        st.warning(f"⚠️ Could not load info content for {section}: {e}")
+    # Load all reading passages for this section once
+    info_passages = []
+    if section in section_files:
+        try:
+            section_csv = pd.read_csv(section_files[section])
+            info_passages = section_csv[section_csv["Type"] == "info"]["Question"].tolist()
+        except Exception as e:
+            st.warning(f"⚠️ Could not load info content for {section}: {e}")
 
-for _, row in sec_df.iterrows():
-    qid = row["QuestionID"]
-    qtext = row["Question"]
-    response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
-    prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
+    for _, row in sec_df.iterrows():
+        qid = row["QuestionID"]
+        qtext = row["Question"]
+        response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
+        prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
-    question_counter += 1
+        question_counter += 1
 
-    # 🎯 Display question and answer
-    col1, col2 = st.columns([10, 2])
-    with col1:
-        st.markdown(
-            f"""
-            <div class='qtext'>Q{question_counter}: {qtext}</div>
-            <div class='qresp'>🧩 <i>Student Response:</i> <b>{response}</b></div>
-            """,
-            unsafe_allow_html=True
-        )
-    with col2:
-        marks_state[qid] = st.radio(
-            label="",
-            options=[0, 1],
-            index=prev_mark,
-            horizontal=True,
-            key=f"{selected_student}_{section}_{qid}"
-        )
-        section_total += marks_state[qid]
-
-    # 📘 Inject reading passage after Q20, Q26, Q32 (only if available)
-    if question_counter in [20, 26, 32]:
-        passage_index = [20, 26, 32].index(question_counter)
-        if passage_index < len(info_passages):
-            passage_text = info_passages[passage_index]
-            st.markdown(
-                f"""
-                <div class='infoblock'>
-                    <span class='info-title'>📘 Read the passage and answer the questions below:</span>
-                    {passage_text}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
+        # 🎯 Display question and answer
         col1, col2 = st.columns([10, 2])
         with col1:
             st.markdown(
@@ -222,6 +187,21 @@ for _, row in sec_df.iterrows():
                 key=f"{selected_student}_{section}_{qid}"
             )
             section_total += marks_state[qid]
+
+        # 📘 Inject reading passage after Q20, Q26, Q32 (only if available)
+        if question_counter in [20, 26, 32]:
+            passage_index = [20, 26, 32].index(question_counter)
+            if passage_index < len(info_passages):
+                passage_text = info_passages[passage_index]
+                st.markdown(
+                    f"""
+                    <div class='infoblock'>
+                        <span class='info-title'>📘 Read the passage and answer the questions below:</span>
+                        {passage_text}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
     st.markdown(f"**Subtotal for {section}: {section_total}/{section_max_marks}**")
     st.markdown("---")
@@ -248,5 +228,3 @@ st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_
 st.markdown("""
 <a href="#top" class="back-to-top">⬆ Back to Top</a>
 """, unsafe_allow_html=True)
-
-
