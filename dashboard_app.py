@@ -31,8 +31,14 @@ data = []
 for doc in docs:
     d = doc.to_dict()
     for r in d.get("Responses", []):
-        # Only include gradable (non-info) questions
-        if r.get("Type") != "info":
+        q_type = str(r.get("Type", "")).strip().lower()
+
+        # 🚫 Skip auto-evaluated and info questions
+        if q_type in ["mcq", "info"]:
+            continue
+
+        # ✅ Keep only gradable (faculty-marked) questions
+        if q_type in ["short", "descriptive", "likert"]:
             data.append({
                 "Name": d.get("Name"),
                 "Roll": d.get("Roll"),
@@ -40,7 +46,7 @@ for doc in docs:
                 "QuestionID": r.get("QuestionID"),
                 "Question": r.get("Question"),
                 "Response": r.get("Response"),
-                "Type": r.get("Type"),
+                "Type": q_type,
             })
 df = pd.DataFrame(data)
 
@@ -197,3 +203,4 @@ st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_
 st.markdown("""
 <a href="#top" class="back-to-top">⬆ Back to Top</a>
 """, unsafe_allow_html=True)
+
