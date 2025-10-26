@@ -61,20 +61,21 @@ mark_data = [d.to_dict() for d in mark_docs if d.to_dict().get("Roll") == select
 marks_df = pd.DataFrame(mark_data) if mark_data else pd.DataFrame(columns=["QuestionID", "Marks"])
 student_df = student_df.merge(marks_df, on="QuestionID", how="left")
 
-# ---------------- FLAT EVALUATION TABLE ----------------
-st.markdown("### 🧾 Evaluation Table (1 mark per question)")
+# ---------------- INLINE LAYOUT ----------------
 st.markdown("""
 <style>
 .qrow {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 12px;
     border-bottom: 1px solid #ddd;
+    padding: 8px 6px;
 }
 .qtext {
     flex: 1;
+    font-size: 15px;
     font-weight: 500;
+    color: #111;
 }
 .qradio {
     flex-shrink: 0;
@@ -84,22 +85,26 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 marks_state = {}
-for _, row in student_df.iterrows():
+
+# Display all questions in one line with radio buttons
+for idx, row in student_df.iterrows():
     qid = row["QuestionID"]
     qtext = row["Question"]
     qtype = row["Type"]
-    resp = row["Response"]
-    scale_info = f"(Scale {row['ScaleMin']}–{row['ScaleMax']})" if qtype == "likert" else ""
     prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
-    st.markdown(f"<div class='qrow'><div class='qtext'>Q{qid}: {qtext} {scale_info}</div></div>", unsafe_allow_html=True)
-    mark = st.radio(
-        f"Marks for {qid}", [0, 1],
-        index=prev_mark,
-        horizontal=True,
-        key=f"mark_{qid}"
-    )
-    marks_state[qid] = mark
+    # Inline container
+    col1, col2 = st.columns([8, 1])
+    with col1:
+        st.markdown(f"**Q{idx+1}:** {qtext}")
+    with col2:
+        marks_state[qid] = st.radio(
+            label="",
+            options=[0, 1],
+            index=prev_mark,
+            horizontal=True,
+            key=f"{selected_student}_{qid}"  # unique key per student-question
+        )
 
 # ---------------- SAVE ALL BUTTON ----------------
 if st.button("💾 Save All Marks"):
@@ -120,28 +125,26 @@ marks_df = pd.DataFrame(marks_data)
 total_marks = marks_df["Marks"].sum() if not marks_df.empty else 0
 max_marks = len(student_df)
 
-st.markdown("---")
 st.metric(label="🏅 Total Marks (All Questions)", value=f"{total_marks}/{max_marks}")
-st.markdown("---")
 
 # ---------------- BACK TO TOP ----------------
 st.markdown("""
-    <style>
-    .back-to-top {
-        position: fixed;
-        bottom: 40px;
-        right: 40px;
-        background-color: #007bff;
-        color: white;
-        border: none;
-        padding: 10px 16px;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        z-index: 9999;
-    }
-    .back-to-top:hover { background-color: #0056b3; }
-    </style>
-    <button class="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})">⬆ Back to Top</button>
+<style>
+.back-to-top {
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    z-index: 9999;
+}
+.back-to-top:hover { background-color: #0056b3; }
+</style>
+<button class="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})">⬆ Back to Top</button>
 """, unsafe_allow_html=True)
