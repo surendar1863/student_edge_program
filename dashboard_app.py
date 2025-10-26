@@ -39,8 +39,6 @@ for doc in docs:
             "Question": r.get("Question"),
             "Response": r.get("Response"),
             "Type": r.get("Type"),
-            "ScaleMin": r.get("ScaleMin", ""),
-            "ScaleMax": r.get("ScaleMax", "")
         })
 df = pd.DataFrame(data)
 
@@ -55,37 +53,34 @@ if student_df.empty:
 
 st.subheader(f"📋 Evaluation for {student_df.iloc[0]['Name']} ({selected_student})")
 
+# ---------------- FILTER ONLY LIKERT / SHORT / DESCRIPTIVE ----------------
+eval_df = student_df[student_df["Type"].isin(["likert", "short", "descriptive"])].copy()
+if eval_df.empty:
+    st.info("No evaluable questions for this student.")
+    st.stop()
+
 # ---------------- LOAD EXISTING MARKS ----------------
 mark_docs = db.collection("faculty_marks").stream()
 mark_data = [d.to_dict() for d in mark_docs if d.to_dict().get("Roll") == selected_student]
 marks_df = pd.DataFrame(mark_data) if mark_data else pd.DataFrame(columns=["QuestionID", "Marks"])
-student_df = student_df.merge(marks_df, on="QuestionID", how="left")
+eval_df = eval_df.merge(marks_df, on="QuestionID", how="left")
 
 # ---------------- GLOBAL STYLING ----------------
 st.markdown("""
 <style>
-/* Compact spacing */
 div[data-testid="stHorizontalBlock"] { margin-bottom: -8px !important; }
-div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !important; }
+div[class*="stRadio"] { margin-top: -10px !important; margin-bottom: -10px !important; }
 .block-container { padding-top: 1rem; padding-bottom: 1rem; }
 
-/* Fonts */
 .qtext { font-size:16px; font-weight:600; color:#111; }
-.qresp { font-size:15px; color:#444; margin-top:-2px; }
+.qresp { font-size:16px; color:#333; margin-top:-4px; margin-bottom:-4px; }
 
-/* Back to top button */
 .back-to-top {
-    position: fixed;
-    bottom: 40px;
-    right: 40px;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    padding: 10px 16px;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    position: fixed; bottom: 40px; right: 40px;
+    background-color: #007bff; color: white;
+    border: none; padding: 10px 16px;
+    border-radius: 8px; font-weight: 600;
+    cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
     z-index: 9999;
 }
 .back-to-top:hover { background-color: #0056b3; }
@@ -95,12 +90,15 @@ div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !import
 # ---------------- MARK ENTRY SECTION ----------------
 marks_state = {}
 
-sections = student_df["Section"].unique().tolist()
+sections = eval_df["Section"].unique().tolist()
+grand_total = 0
+grand_max = 0
 
 for section in sections:
-    sec_df = student_df[student_df["Section"] == section]
-    st.markdown(f"### 🧾 {section}")
+    sec_df = eval_df[eval_df["Section"] == section]
+    st.markdown(f"## 🧾 {section}")
     
+    section_total = 0
     for idx, row in sec_df.iterrows():
         qid = row["QuestionID"]
         qtext = row["Question"]
@@ -122,10 +120,15 @@ for section in sections:
                 options=[0, 1],
                 index=prev_mark,
                 horizontal=True,
-                key=f"{selected_student}_{qid}"
+                key=f"{selected_student}_{section}_{qid}"  # ✅ Unique key fix
             )
+            section_total += marks_state[qid]
 
+    st.markdown(f"**Subtotal for {section}: {section_total}/{len(sec_df)}**")
     st.markdown("---")
+
+    grand_total += section_total
+    grand_max += len(sec_df)
 
 # ---------------- SAVE BUTTON ----------------
 if st.button("💾 Save All Marks"):
@@ -140,15 +143,9 @@ if st.button("💾 Save All Marks"):
     st.success("✅ All marks saved successfully!")
 
 # ---------------- TOTAL MARKS ----------------
-marks_docs = db.collection("faculty_marks").stream()
-marks_data = [d.to_dict() for d in marks_docs if d.to_dict().get("Roll") == selected_student]
-marks_df = pd.DataFrame(marks_data)
-total_marks = marks_df["Marks"].sum() if not marks_df.empty else 0
-max_marks = len(student_df)
+st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_max}")
 
-st.metric(label="🏅 Total Marks (All Sections)", value=f"{total_marks}/{max_marks}")
-
-# ---------------- BACK TO TOP BUTTON ----------------
+# ---------------- BACK TO TOP ----------------
 st.markdown("""
 <a href="#top" class="back-to-top">⬆ Back to Top</a>
 """, unsafe_allow_html=True)
