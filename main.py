@@ -129,13 +129,9 @@ with col2:
     st.markdown("### 🔝 Navigation Help")
     st.info("""
     **To return to the top:**
-    1. Use your browser's scroll bar on the right
-    2. Press `Home` key on your keyboard
-    3. Use mouse wheel to scroll up
+    Press `Home` key on your keyboard
     """)
-    
-    if st.button("⬆️ I understand - clear this message", use_container_width=True):
-        st.success("Message cleared! Use scroll bar to go to top.")
+
 
 
 
