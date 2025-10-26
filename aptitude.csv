@@ -1,4 +1,4 @@
-﻿No,Section,Question,OptionA,OptionB,OptionC,OptionD,Correct,Type
+QuestionID,Section,Question,OptionA,OptionB,OptionC,OptionD,Correct,Type
 1,A - Quantitative Aptitude,The sum of two numbers is 50 and their difference is 6. Find the numbers.,"28, 22","26, 24","23, 27","30, 20","26, 24",mcq
 2,A - Quantitative Aptitude,A train 120 meters long passes a pole in 12 seconds. Find the speed of the train.,10 m/s,12 m/s,15 m/s,20 m/s,10 m/s,mcq
 3,A - Quantitative Aptitude,"If 3 workers can complete a task in 12 days, how many workers are required to complete it in 6 days?",3,4,6,9,6,mcq
@@ -96,3 +96,4 @@
 95,D - General Awareness,Who invented telephone?,,,,,,short
 96,D - General Awareness,Highest civilian award in India?,,,,,,short
 97,D - General Awareness,Capital of Canada?,,,,,,short
+
