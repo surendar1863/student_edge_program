@@ -80,7 +80,7 @@ div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !import
     padding:15px 20px; 
     border-left:5px solid #007bff;
     border-radius:6px; 
-    margin-bottom:15px; 
+    margin-bottom:20px; 
     font-size:16px; 
     line-height:1.6;
     color:#333;
@@ -117,35 +117,36 @@ for section in sections:
     st.markdown(f"## 🧾 {section}")
 
     section_total = 0
-    section_question_count = 0
     
-    # First, count only gradable questions (non-info types)
+    # Separate info content from gradable questions
+    info_content = sec_df[sec_df["Type"] == "info"]
     gradable_questions = sec_df[sec_df["Type"] != "info"]
+    
     section_max_marks = len(gradable_questions)
     
-    question_counter = 0  # Counter only for gradable questions
+    # First display all info content
+    for idx, row in info_content.iterrows():
+        qtext = row["Question"]
+        st.markdown(
+            f"""
+            <div class='infoblock'>
+                <span class='info-title'>📘 Information</span>
+                {qtext}
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
     
-    for idx, row in sec_df.iterrows():
+    # Then display gradable questions with marks
+    question_counter = 0
+    for idx, row in gradable_questions.iterrows():
         qid = row["QuestionID"]
         qtext = row["Question"]
         qtype = row["Type"]
         response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
         prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
-        # If info type — display as informational block, no marks
-        if qtype == "info":
-            st.markdown(
-                f"""
-                <div class='infoblock'>
-                    <span class='info-title'>📘 Information</span>
-                    {qtext}
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
-            continue
-
-        # Increment question counter only for gradable questions
+        # Increment question counter
         question_counter += 1
         
         # Layout: Question + response + marks (0/1)
@@ -189,22 +190,3 @@ if st.button("💾 Save All Marks"):
 # ---------------- TOTAL MARKS ----------------
 st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_max}")
 
-# ---------------- BACK TO TOP ----------------
-st.markdown("---")
-st.markdown(
-    '''
-    <div style="text-align: center;">
-        <a href="#" style="
-            display: inline-block;
-            background-color: #007bff;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            text-decoration: none;
-            font-weight: bold;
-            margin: 10px 0;
-        ">⬆️ Back to Top</a>
-    </div>
-    ''', 
-    unsafe_allow_html=True
-)
