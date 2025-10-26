@@ -1,15 +1,16 @@
-import streamlit as st
-import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
+import json
+import streamlit as st
 
-# --- FIREBASE SETUP ---
-cred = credentials.Certificate("firebase_key.json")
-try:
-    firebase_admin.get_app()
-except ValueError:
+# Load Firebase credentials from Streamlit Secrets
+if not firebase_admin._apps:
+    firebase_config = json.loads(st.secrets["firebase_key"])
+    cred = credentials.Certificate(firebase_config)
     firebase_admin.initialize_app(cred)
+
 db = firestore.client()
+
 
 # --- LOAD CSV FILES ---
 files = {
@@ -98,3 +99,4 @@ if name and roll:
                 st.success("✅ Descriptive answers submitted successfully!")
 else:
     st.warning("Please enter your name and roll number to begin.")
+
