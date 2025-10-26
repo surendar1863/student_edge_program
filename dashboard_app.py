@@ -2,11 +2,10 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import pandas as pd
-import plotly.express as px
 import json
 from datetime import datetime
 
-# ---------------- FIREBASE CONNECTION ----------------
+# ---------------- FIREBASE INIT ----------------
 try:
     firebase_config = json.loads(st.secrets["firebase_key"])
     cred = credentials.Certificate(firebase_config)
@@ -18,161 +17,129 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ---------------- PAGE SETUP ----------------
-st.set_page_config(page_title="Assessment Dashboard", layout="wide")
-st.title("📊 Student Assessment Dashboard")
+st.set_page_config(page_title="Student Assessment Dashboard", layout="wide")
+st.title("🏫 Student Assessment Dashboard")
 
-# ---------------- RETRIEVE DATA ----------------
+# ---------------- LOAD STUDENT RESPONSES ----------------
 collection_ref = db.collection("student_responses")
-docs = collection_ref.stream()
+docs = list(collection_ref.stream())
+
+if not docs:
+    st.warning("No student data found in Firestore.")
+    st.stop()
 
 data = []
 for doc in docs:
     d = doc.to_dict()
-    for r in d["Responses"]:
+    for r in d.get("Responses", []):
         data.append({
-            "Name": d.get("Name", ""),
-            "Roll": d.get("Roll", ""),
-            "Section": d.get("Section", ""),
-            "Timestamp": d.get("Timestamp", ""),
-            "QuestionID": r.get("QuestionID", ""),
-            "Question": r.get("Question", ""),
-            "Response": r.get("Response", ""),
-            "Type": r.get("Type", ""),
+            "Name": d.get("Name"),
+            "Roll": d.get("Roll"),
+            "Section": d.get("Section"),
+            "QuestionID": r.get("QuestionID"),
+            "Question": r.get("Question"),
+            "Response": r.get("Response"),
+            "Type": r.get("Type"),
         })
 
-if not data:
-    st.warning("No responses found in Firestore.")
+df = pd.DataFrame(data)
+
+# ---------------- STUDENT DROPDOWN ----------------
+students = sorted(df["Roll"].unique().tolist())
+selected_student = st.selectbox("Select Student Roll Number", students)
+
+student_df = df[df["Roll"] == selected_student]
+
+if student_df.empty:
+    st.info("No data for selected student.")
     st.stop()
 
-df = pd.DataFrame(data)
-st.success(f"Total Records Found: {len(df)}")
+# ---------------- SUMMARY (no raw questions) ----------------
+st.markdown("### 🧾 Student Summary")
 
-# ---------------- FILTERING ----------------
-section_list = sorted(df["Section"].unique().tolist())
-section = st.selectbox("Select Section", ["All"] + section_list)
+sections = student_df["Section"].unique()
+summary_records = []
 
-if section != "All":
-    df = df[df["Section"] == section]
+for sec in sections:
+    subset = student_df[student_df["Section"] == sec]
+    likert_df = subset[subset["Type"].isin(["likert", "mcq"])].copy()
+    likert_df["Numeric"] = pd.to_numeric(likert_df["Response"], errors="coerce")
+    avg_score = likert_df["Numeric"].mean(skipna=True)
+    summary_records.append({"Section": sec, "LikertAvg": round(avg_score, 2)})
 
-# ---------------- STUDENT FILTER ----------------
-student_list = sorted(df["Roll"].unique().tolist())
-selected_student = st.selectbox("Select Student Roll Number", ["All"] + student_list)
+summary_df = pd.DataFrame(summary_records)
+st.dataframe(summary_df, use_container_width=True)
 
-if selected_student != "All":
-    df = df[df["Roll"] == selected_student]
+# ---------------- SHORT ANSWER EVALUATION ----------------
+short_df = student_df[student_df["Type"] == "short"].copy()
 
-# ---------------- DISPLAY DATA ----------------
-st.dataframe(df, use_container_width=True)
-
-# =====================================================
-# ✍️ MARK ENTRY FOR SHORT ANSWERS (Persistent)
-# =====================================================
-short_df = df[df["Type"] == "short"].copy()
 if not short_df.empty:
     st.markdown("### ✍️ Manual Evaluation for Short Answers")
 
-    marks_data = []
-    for i, row in short_df.iterrows():
-        q_text = row["Question"][:100] + ("..." if len(row["Question"]) > 100 else "")
+    for idx, row in short_df.iterrows():
+        st.markdown(f"**Q{row['QuestionID']}: {row['Question']}**")
+        st.info(f"**Student Answer:** {row['Response']}")
         mark = st.number_input(
-            f"Marks for {row['Roll']} – {row['QuestionID']} ({q_text})",
-            min_value=0.0, max_value=10.0, step=0.5, key=f"mark_{i}"
+            f"Marks (1 mark max) for Q{row['QuestionID']}",
+            min_value=0.0, max_value=1.0, step=0.5,
+            key=f"mark_{selected_student}_{idx}"
         )
-        marks_data.append({
-            "Roll": row["Roll"],
-            "QuestionID": row["QuestionID"],
-            "Marks": mark,
-            "Section": row["Section"],
-            "Evaluator": "Faculty",
-            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        })
 
-    if st.button("💾 Save Marks"):
-        for record in marks_data:
-            doc_id = f"{record['Roll']}_{record['Section'].replace(' ', '_')}_{record['QuestionID']}"
+        if st.button(f"💾 Save Marks for {row['QuestionID']}", key=f"save_{idx}"):
+            doc_id = f"{row['Roll']}_{row['Section'].replace(' ', '_')}_{row['QuestionID']}"
+            record = {
+                "Roll": row["Roll"],
+                "Section": row["Section"],
+                "QuestionID": row["QuestionID"],
+                "AnswerText": row["Response"],
+                "Marks": mark,
+                "Evaluator": "Faculty",
+                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
             db.collection("short_marks").document(doc_id).set(record)
-        st.success("✅ Marks saved successfully to Firestore!")
+            st.success(f"Saved marks for {row['QuestionID']} ✅")
 
-# =====================================================
-# 🔄 LOAD EXISTING SHORT MARKS FROM FIRESTORE
-# =====================================================
+else:
+    st.info("No short-answer questions for this student.")
+
+# ---------------- TOTAL MARKS (from likert + short) ----------------
 marks_docs = db.collection("short_marks").stream()
-marks_records = [d.to_dict() for d in marks_docs]
-marks_df = pd.DataFrame(marks_records) if marks_records else pd.DataFrame()
+marks_data = [d.to_dict() for d in marks_docs if d.to_dict().get("Roll") == selected_student]
+marks_df = pd.DataFrame(marks_data)
 
-# =====================================================
-# 📊 COMPUTE TOTALS AND SECTION-WISE AVERAGES
-# =====================================================
-likert_df = df[df["Type"].isin(["likert", "mcq"])].copy()
-likert_df["ResponseNumeric"] = pd.to_numeric(likert_df["Response"], errors="coerce")
-
-# Compute numeric means per section
-section_scores = (
-    likert_df.dropna(subset=["ResponseNumeric"])
-    .groupby(["Roll", "Section"])["ResponseNumeric"]
-    .mean()
-    .reset_index()
-    .rename(columns={"ResponseNumeric": "SectionScore"})
-)
-
-# Add short marks if available
 if not marks_df.empty:
-    short_sum = marks_df.groupby(["Roll", "Section"])["Marks"].sum().reset_index()
-    section_scores = pd.concat([section_scores, short_sum], ignore_index=True)
-    section_scores["Score"] = section_scores.get("SectionScore", 0) + section_scores.get("Marks", 0)
-    section_scores["Score"].fillna(section_scores.get("Marks", section_scores.get("SectionScore")), inplace=True)
+    short_total = marks_df["Marks"].sum()
 else:
-    section_scores["Score"] = section_scores["SectionScore"]
+    short_total = 0
 
-# Student summary
-if selected_student != "All":
-    summary_df = section_scores[section_scores["Roll"] == selected_student].copy()
-else:
-    summary_df = section_scores.copy()
+numeric_df = student_df.copy()
+numeric_df["Numeric"] = pd.to_numeric(numeric_df["Response"], errors="coerce")
+likert_total = numeric_df["Numeric"].sum(skipna=True)
+grand_total = likert_total + short_total
 
-if not summary_df.empty:
-    st.markdown("### 🧾 Section-wise Scores")
-    st.dataframe(summary_df[["Roll", "Section", "Score"]], use_container_width=True)
+st.markdown("---")
+st.metric(label="🏅 Total Marks (All Sections Combined)", value=f"{grand_total:.2f}")
+st.markdown("---")
 
-    total_score = summary_df["Score"].sum()
-    st.markdown(f"## 🏅 **Total Score for {selected_student if selected_student!='All' else 'All Students'}:** {total_score:.2f}")
-
-# =====================================================
-# 📈 VISUALIZATIONS
-# =====================================================
-st.markdown("### 📊 Performance Visualizations")
-
-if not summary_df.empty:
-    # Bar chart for section scores
-    fig_bar = px.bar(
-        summary_df,
-        x="Section",
-        y="Score",
-        color="Section",
-        text_auto=".2f",
-        title=f"Section-wise Performance – {selected_student if selected_student!='All' else 'Overall'}"
-    )
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-    # Pie chart for proportional contribution
-    fig_pie = px.pie(
-        summary_df,
-        names="Section",
-        values="Score",
-        title="Marks Distribution by Section"
-    )
-    st.plotly_chart(fig_pie, use_container_width=True)
-else:
-    st.info("No numeric data available for visualization.")
-
-# =====================================================
-# 📤 EXPORT TO CSV
-# =====================================================
-st.markdown("### ⬇️ Download Consolidated Report")
-csv = summary_df.to_csv(index=False).encode("utf-8")
-st.download_button(
-    label="Download Report as CSV",
-    data=csv,
-    file_name=f"{selected_student if selected_student!='All' else 'all_students'}_summary.csv",
-    mime="text/csv"
-)
+# ---------------- BACK TO TOP BUTTON ----------------
+st.markdown("""
+    <style>
+    #back-to-top {
+        position: fixed;
+        bottom: 40px;
+        right: 40px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        z-index: 9999;
+    }
+    </style>
+    <button id="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
+        ⬆ Back to Top
+    </button>
+""", unsafe_allow_html=True)
