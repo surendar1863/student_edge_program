@@ -119,34 +119,9 @@ else:
     st.info("👆 Please enter your Name and Roll Number to start.")
 
 # ---------------- BACK TO TOP BUTTON ----------------
+# Add this at the very end of your code:
 st.markdown("---")
-st.markdown("### Navigation")
-
-# Create columns for better positioning
-col1, col2, col3 = st.columns([1, 2, 1])
-
-with col2:
-    # Simple back to top button that will appear at the bottom
-    if st.button("⬆️ Back to Top", use_container_width=True, type="primary"):
-        # This will cause the page to reload and scroll to top
-        st.markdown(
-            """
-            <script>
-                window.scrollTo(0, 0);
-            </script>
-            """, 
-            unsafe_allow_html=True
-        )
-        st.rerun()  # This helps refresh the page
-
-# Alternative: Add a simple anchor link approach
-# ---------------- BACK TO TOP ----------------
-st.markdown("---")
-st.markdown("### 🔝 Quick Navigation")
-
-if st.button("⬆️ Take me to the top of the page", use_container_width=True, type="primary"):
-    # This will refresh the page and start from top
+if st.button("⬆️ Back to Top"):
     st.rerun()
 
-st.markdown("*Click the button above to return to the top*")
 
