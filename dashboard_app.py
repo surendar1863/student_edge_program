@@ -75,8 +75,24 @@ div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !import
 
 .qtext { font-size:16px; font-weight:600; color:#111; margin-bottom:3px; }
 .qresp { font-size:15px; color:#333; margin-top:-4px; margin-bottom:4px; }
-.infoblock { background-color:#f7f7f7; padding:10px 15px; border-left:5px solid #007bff;
-              border-radius:4px; margin-bottom:10px; font-size:16px; line-height:1.5; }
+.infoblock { 
+    background-color:#f0f8ff; 
+    padding:15px 20px; 
+    border-left:5px solid #007bff;
+    border-radius:6px; 
+    margin-bottom:15px; 
+    font-size:16px; 
+    line-height:1.6;
+    color:#333;
+    font-style: normal;
+}
+.info-title {
+    font-size:18px; 
+    font-weight:700; 
+    color:#007bff; 
+    margin-bottom:8px;
+    display: block;
+}
 
 .back-to-top {
     position: fixed; bottom: 40px; right: 40px;
@@ -101,6 +117,14 @@ for section in sections:
     st.markdown(f"## 🧾 {section}")
 
     section_total = 0
+    section_question_count = 0
+    
+    # First, count only gradable questions (non-info types)
+    gradable_questions = sec_df[sec_df["Type"] != "info"]
+    section_max_marks = len(gradable_questions)
+    
+    question_counter = 0  # Counter only for gradable questions
+    
     for idx, row in sec_df.iterrows():
         qid = row["QuestionID"]
         qtext = row["Question"]
@@ -108,17 +132,28 @@ for section in sections:
         response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
         prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
-        # If info type — display as paragraph block, no marks
+        # If info type — display as informational block, no marks
         if qtype == "info":
-            st.markdown(f"<div class='infoblock'>{qtext}</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div class='infoblock'>
+                    <span class='info-title'>📘 Information</span>
+                    {qtext}
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
             continue
 
+        # Increment question counter only for gradable questions
+        question_counter += 1
+        
         # Layout: Question + response + marks (0/1)
         col1, col2 = st.columns([10, 2])
         with col1:
             st.markdown(
                 f"""
-                <div class='qtext'>Q{idx+1}: {qtext}</div>
+                <div class='qtext'>Q{question_counter}: {qtext}</div>
                 <div class='qresp'>🧩 <i>Student Response:</i> <b>{response}</b></div>
                 """,
                 unsafe_allow_html=True
@@ -133,11 +168,11 @@ for section in sections:
             )
             section_total += marks_state[qid]
 
-    st.markdown(f"**Subtotal for {section}: {section_total}/{len(sec_df[sec_df['Type']!='info'])}**")
+    st.markdown(f"**Subtotal for {section}: {section_total}/{section_max_marks}**")
     st.markdown("---")
 
     grand_total += section_total
-    grand_max += len(sec_df[sec_df['Type'] != 'info'])
+    grand_max += section_max_marks
 
 # ---------------- SAVE BUTTON ----------------
 if st.button("💾 Save All Marks"):
@@ -154,4 +189,22 @@ if st.button("💾 Save All Marks"):
 # ---------------- TOTAL MARKS ----------------
 st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_max}")
 
-
+# ---------------- BACK TO TOP ----------------
+st.markdown("---")
+st.markdown(
+    '''
+    <div style="text-align: center;">
+        <a href="#" style="
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 10px 0;
+        ">⬆️ Back to Top</a>
+    </div>
+    ''', 
+    unsafe_allow_html=True
+)
