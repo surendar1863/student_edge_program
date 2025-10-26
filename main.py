@@ -29,34 +29,6 @@ files = {
 st.set_page_config(page_title="Student Edge Assessment", layout="wide")
 st.title("🧠 Student Edge Assessment Portal")
 
-# ---------------- BACK TO TOP BUTTON STYLING ----------------
-st.markdown("""
-    <style>
-    .back-to-top {
-        position: fixed;
-        bottom: 40px;
-        right: 40px;
-        background-color: #0066cc;
-        color: white;
-        border: none;
-        padding: 12px 18px;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        transition: background-color 0.3s ease;
-        z-index: 9999;
-        display: none;
-    }
-    .back-to-top:hover {
-        background-color: #004a99;
-    }
-    .back-to-top.show {
-        display: block;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 # ---------------- STUDENT DETAILS ----------------
 name = st.text_input("Enter Your Name")
 roll = st.text_input("Enter Roll Number (e.g., 24bbab110)")
@@ -147,32 +119,42 @@ else:
     st.info("👆 Please enter your Name and Roll Number to start.")
 
 # ---------------- BACK TO TOP BUTTON ----------------
-st.markdown("""
-    <div id="back-to-top-container">
-        <button class="back-to-top" onclick="scrollToTop()">⬆️ Back to Top</button>
+st.markdown("---")
+st.markdown("### Navigation")
+
+# Create columns for better positioning
+col1, col2, col3 = st.columns([1, 2, 1])
+
+with col2:
+    # Simple back to top button that will appear at the bottom
+    if st.button("⬆️ Back to Top", use_container_width=True, type="primary"):
+        # This will cause the page to reload and scroll to top
+        st.markdown(
+            """
+            <script>
+                window.scrollTo(0, 0);
+            </script>
+            """, 
+            unsafe_allow_html=True
+        )
+        st.rerun()  # This helps refresh the page
+
+# Alternative: Add a simple anchor link approach
+st.markdown(
+    """
+    <div style='text-align: center; margin-top: 20px;'>
+        <a href='#' style='text-decoration: none;'>
+            <button style='
+                background-color: #0066cc;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            '>⬆️ Back to Top</button>
+        </a>
     </div>
-    
-    <script>
-    function scrollToTop() {
-        window.scrollTo({top: 0, behavior: 'smooth'});
-    }
-    
-    // Show/hide button based on scroll position
-    window.addEventListener('scroll', function() {
-        const button = document.querySelector('.back-to-top');
-        if (window.scrollY > 200) {
-            button.classList.add('show');
-        } else {
-            button.classList.remove('show');
-        }
-    });
-    
-    // Initialize button state
-    document.addEventListener('DOMContentLoaded', function() {
-        const button = document.querySelector('.back-to-top');
-        if (window.scrollY > 200) {
-            button.classList.add('show');
-        }
-    });
-    </script>
-""", unsafe_allow_html=True)
+    """, 
+    unsafe_allow_html=True
+)
