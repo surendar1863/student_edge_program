@@ -124,13 +124,13 @@ for section in sections:
     
     section_max_marks = len(gradable_questions)
     
-    # First display all info content
+    # First display all info content - WITHOUT student responses
     for idx, row in info_content.iterrows():
         qtext = row["Question"]
         st.markdown(
             f"""
             <div class='infoblock'>
-                <span class='info-title'>📘 Information</span>
+                <span class='info-title'>📘 Reading Passage</span>
                 {qtext}
             </div>
             """, 
@@ -190,3 +190,22 @@ if st.button("💾 Save All Marks"):
 # ---------------- TOTAL MARKS ----------------
 st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_max}")
 
+# ---------------- BACK TO TOP ----------------
+st.markdown("---")
+st.markdown(
+    '''
+    <div style="text-align: center;">
+        <a href="#" style="
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 10px 0;
+        ">⬆️ Back to Top</a>
+    </div>
+    ''', 
+    unsafe_allow_html=True
+)
