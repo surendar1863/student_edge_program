@@ -31,15 +31,17 @@ data = []
 for doc in docs:
     d = doc.to_dict()
     for r in d.get("Responses", []):
-        data.append({
-            "Name": d.get("Name"),
-            "Roll": d.get("Roll"),
-            "Section": d.get("Section"),
-            "QuestionID": r.get("QuestionID"),
-            "Question": r.get("Question"),
-            "Response": r.get("Response"),
-            "Type": r.get("Type"),
-        })
+        # Only include responses that are NOT info type
+        if r.get("Type") != "info":
+            data.append({
+                "Name": d.get("Name"),
+                "Roll": d.get("Roll"),
+                "Section": d.get("Section"),
+                "QuestionID": r.get("QuestionID"),
+                "Question": r.get("Question"),
+                "Response": r.get("Response"),
+                "Type": r.get("Type"),
+            })
 df = pd.DataFrame(data)
 
 # ---------------- STUDENT SELECTION ----------------
@@ -53,18 +55,11 @@ if student_df.empty:
 
 st.subheader(f"📋 Evaluation for {student_df.iloc[0]['Name']} ({selected_student})")
 
-# ---------------- FILTER TYPES ----------------
-# Keep likert, short, descriptive, info; remove mcq
-eval_df = student_df[student_df["Type"].isin(["likert", "short", "descriptive", "info"])].copy()
-if eval_df.empty:
-    st.info("No evaluable questions for this student.")
-    st.stop()
-
 # ---------------- LOAD EXISTING MARKS ----------------
 mark_docs = db.collection("faculty_marks").stream()
 mark_data = [d.to_dict() for d in mark_docs if d.to_dict().get("Roll") == selected_student]
 marks_df = pd.DataFrame(mark_data) if mark_data else pd.DataFrame(columns=["QuestionID", "Marks"])
-eval_df = eval_df.merge(marks_df, on="QuestionID", how="left")
+student_df = student_df.merge(marks_df, on="QuestionID", how="left")
 
 # ---------------- STYLING ----------------
 st.markdown("""
@@ -75,15 +70,23 @@ div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !import
 
 .qtext { font-size:16px; font-weight:600; color:#111; margin-bottom:3px; }
 .qresp { font-size:15px; color:#333; margin-top:-4px; margin-bottom:4px; }
-
-.infoblock {
-    background-color:#f8f9fa;
-    padding:14px 18px;
+.infoblock { 
+    background-color:#f0f8ff; 
+    padding:15px 20px; 
     border-left:5px solid #007bff;
-    border-radius:6px;
-    margin:8px 0 12px 0;
-    font-size:16px;
-    line-height:1.5;
+    border-radius:6px; 
+    margin-bottom:20px; 
+    font-size:16px; 
+    line-height:1.6;
+    color:#333;
+    font-style: normal;
+}
+.info-title {
+    font-size:18px; 
+    font-weight:700; 
+    color:#007bff; 
+    margin-bottom:8px;
+    display: block;
 }
 
 .back-to-top {
@@ -100,35 +103,63 @@ div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !import
 
 # ---------------- MARK ENTRY SECTION ----------------
 marks_state = {}
-sections = eval_df["Section"].unique().tolist()
+sections = student_df["Section"].unique().tolist()
 grand_total = 0
 grand_max = 0
 
 for section in sections:
-    sec_df = eval_df[eval_df["Section"] == section]
+    sec_df = student_df[student_df["Section"] == section]
     st.markdown(f"## 🧾 {section}")
+    
+    # Load the original CSV to get info content for this section
+    section_files = {
+        "Aptitude Test": "aptitude.csv",
+        "Adaptability & Learning": "adaptability_learning.csv", 
+        "Communication Skills - Objective": "communcation_skills_objective.csv",
+        "Communication Skills - Descriptive": "communcation_skills_descriptive.csv",
+    }
+    
+    # Display info content from CSV
+    if section in section_files:
+        try:
+            section_csv = pd.read_csv(section_files[section])
+            info_content = section_csv[section_csv["Type"] == "info"]
+            
+            for idx, row in info_content.iterrows():
+                qtext = row["Question"]
+                st.markdown(
+                    f"""
+                    <div class='infoblock'>
+                        <span class='info-title'>📘 Reading Passage</span>
+                        {qtext}
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
+        except Exception as e:
+            st.warning(f"Could not load info content for {section}: {e}")
 
     section_total = 0
-    q_counter = 1  # For question numbering excluding info
-
-    for _, row in sec_df.iterrows():
+    section_max_marks = len(sec_df)
+    
+    # Display gradable questions with marks
+    question_counter = 0
+    for idx, row in sec_df.iterrows():
         qid = row["QuestionID"]
         qtext = row["Question"]
         qtype = row["Type"]
         response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
         prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
-        # ✅ INFO TYPE → show paragraph (no numbering, no marks)
-        if qtype == "info":
-            st.markdown(f"<div class='infoblock'>{qtext}</div>", unsafe_allow_html=True)
-            continue
-
-        # ✅ Normal questions (likert, short, descriptive)
+        # Increment question counter
+        question_counter += 1
+        
+        # Layout: Question + response + marks (0/1)
         col1, col2 = st.columns([10, 2])
         with col1:
             st.markdown(
                 f"""
-                <div class='qtext'>Q{q_counter}: {qtext}</div>
+                <div class='qtext'>Q{question_counter}: {qtext}</div>
                 <div class='qresp'>🧩 <i>Student Response:</i> <b>{response}</b></div>
                 """,
                 unsafe_allow_html=True
@@ -142,13 +173,12 @@ for section in sections:
                 key=f"{selected_student}_{section}_{qid}"
             )
             section_total += marks_state[qid]
-        q_counter += 1  # Only increment for real questions
 
-    st.markdown(f"**Subtotal for {section}: {section_total}/{len(sec_df[sec_df['Type']!='info'])}**")
+    st.markdown(f"**Subtotal for {section}: {section_total}/{section_max_marks}**")
     st.markdown("---")
 
     grand_total += section_total
-    grand_max += len(sec_df[sec_df['Type'] != 'info'])
+    grand_max += section_max_marks
 
 # ---------------- SAVE BUTTON ----------------
 if st.button("💾 Save All Marks"):
@@ -166,6 +196,21 @@ if st.button("💾 Save All Marks"):
 st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_max}")
 
 # ---------------- BACK TO TOP ----------------
-st.markdown("""
-<a href="#top" class="back-to-top">⬆ Back to Top</a>
-""", unsafe_allow_html=True)
+st.markdown("---")
+st.markdown(
+    '''
+    <div style="text-align: center;">
+        <a href="#" style="
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 10px 0;
+        ">⬆️ Back to Top</a>
+    </div>
+    ''', 
+    unsafe_allow_html=True
+)
