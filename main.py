@@ -4,9 +4,9 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 
-# ------------------------------------------------------------------
-# 🔹 Firebase Initialization
-# ------------------------------------------------------------------
+# -------------------------------------------------------------
+# 🔹 Firebase Setup
+# -------------------------------------------------------------
 if not firebase_admin._apps:
     try:
         firebase_config = json.loads(st.secrets["firebase_key"])
@@ -16,9 +16,9 @@ if not firebase_admin._apps:
     except Exception as e:
         st.error(f"Firebase initialization failed: {e}")
 
-# ------------------------------------------------------------------
+# -------------------------------------------------------------
 # 🔹 File Mapping
-# ------------------------------------------------------------------
+# -------------------------------------------------------------
 files = {
     "Aptitude Test": "aptitude.csv",
     "Adaptability & Learning": "adaptability_learning.csv",
@@ -26,22 +26,17 @@ files = {
     "Communication Skills - Descriptive": "communcation_skills_descriptive.csv"
 }
 
-# ------------------------------------------------------------------
-# 🔹 Page Setup
-# ------------------------------------------------------------------
-st.set_page_config(page_title="Student Assessment Portal", layout="wide")
+# -------------------------------------------------------------
+# 🔹 Streamlit UI
+# -------------------------------------------------------------
+st.set_page_config(page_title="Assessment Portal", layout="wide")
 st.title("🎓 Student Assessment Portal")
 
-# ------------------------------------------------------------------
-# 🔹 Student Login
-# ------------------------------------------------------------------
 name = st.text_input("Enter Your Name")
 roll = st.text_input("Enter Roll Number (e.g., 24bbab110)")
 
 if name and roll:
-    st.success(f"Welcome, {name}! Please choose a test section below.")
-
-    # Select Section
+    st.success(f"Welcome, {name}! Please choose a section to begin.")
     section = st.selectbox("Select Section", list(files.keys()))
 
     if section:
@@ -52,38 +47,49 @@ if name and roll:
         else:
             st.markdown("---")
             st.subheader(f"📘 {section}")
-            st.markdown("Answer all the questions below and click **Submit**.")
 
             responses = {}
             score = 0
 
-            # Identify column pattern based on question type
             for idx, row in df.iterrows():
                 q = row["Question"]
                 st.markdown(f"**Q{idx+1}. {q}**")
 
-                # Objective Type
+                # ---------------------------------------------------------
+                # APTITUDE + COMMUNICATION OBJECTIVE (MCQ)
+                # ---------------------------------------------------------
                 if "A" in df.columns and not pd.isna(row.get("A", "")):
                     options = [row["A"], row["B"], row["C"], row["D"]]
-                    answer = st.radio(f"Select your answer for Q{idx+1}", options, key=f"q{idx}")
+                    answer = st.radio(f"Your answer for Q{idx+1}", options, key=f"q{idx}")
                     responses[q] = answer
 
-                    # Compare with Correct Answer (if present)
                     correct = str(row.get("Correct", "")).strip()
                     if correct and answer == correct:
                         score += 1
 
-                # Descriptive Type
+                # ---------------------------------------------------------
+                # ADAPTABILITY (LIKERT SCALE)
+                # ---------------------------------------------------------
+                elif "Likert" in df.columns or "Scale" in section:
+                    rating = st.radio(
+                        "Your response:",
+                        ["1 – Strongly Disagree", "2 – Disagree", "3 – Neutral", "4 – Agree", "5 – Strongly Agree"],
+                        key=f"l{idx}",
+                    )
+                    responses[q] = rating
+
+                # ---------------------------------------------------------
+                # DESCRIPTIVE QUESTIONS
+                # ---------------------------------------------------------
                 else:
                     text = st.text_area(f"Your Answer for Q{idx+1}", key=f"t{idx}")
                     responses[q] = text
 
-            # ------------------------------------------------------------------
-            # 🔹 Submission and Firestore Storage
-            # ------------------------------------------------------------------
+            # -------------------------------------------------------------
+            # 🔹 Submit Button
+            # -------------------------------------------------------------
             if st.button("✅ Submit Responses"):
                 try:
-                    # Prepare data for Firestore
                     doc_ref = db.collection("student_responses").document(roll)
                     doc_ref.set({
                         "Name": name,
