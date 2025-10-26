@@ -1,11 +1,11 @@
 import streamlit as st
-import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
+import pandas as pd
 import json
-import time
+from datetime import datetime
 
-# ---------------- FIREBASE CONNECTION ----------------
+# ---------------- FIREBASE INIT ----------------
 try:
     firebase_config = json.loads(st.secrets["firebase_key"])
     cred = credentials.Certificate(firebase_config)
@@ -14,125 +14,209 @@ except Exception:
 
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
-
 db = firestore.client()
 
-# ---------------- CSV FILES ----------------
-files = {
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(page_title="Faculty Evaluation Dashboard", layout="wide")
+st.title("🎓 Faculty Evaluation Dashboard")
+
+# ---------------- LOAD STUDENT RESPONSES ----------------
+collection_ref = db.collection("student_responses")
+docs = list(collection_ref.stream())
+if not docs:
+    st.warning("No student data found in Firestore.")
+    st.stop()
+
+data = []
+for doc in docs:
+    d = doc.to_dict()
+    for r in d.get("Responses", []):
+        q_type = str(r.get("Type", "")).strip().lower()
+
+        # 🚫 Skip auto-evaluated and info-only questions
+        if q_type in ["mcq", "info"]:
+            continue
+
+        # ✅ Keep only gradable (faculty-marked) questions
+        if q_type in ["short", "descriptive", "likert"]:
+            data.append({
+                "Name": d.get("Name"),
+                "Roll": d.get("Roll"),
+                "Section": d.get("Section"),
+                "QuestionID": r.get("QuestionID"),
+                "Question": r.get("Question"),
+                "Response": r.get("Response"),
+                "Type": q_type,
+            })
+
+df = pd.DataFrame(data)
+
+# ---------------- STUDENT SELECTION ----------------
+students = sorted(df["Roll"].unique().tolist())
+selected_student = st.selectbox("Select Student Roll Number", students)
+
+student_df = df[df["Roll"] == selected_student]
+if student_df.empty:
+    st.info("No data found for this student.")
+    st.stop()
+
+st.subheader(f"📋 Evaluation for {student_df.iloc[0]['Name']} ({selected_student})")
+
+# ---------------- LOAD EXISTING MARKS ----------------
+mark_docs = db.collection("faculty_marks").stream()
+mark_data = [d.to_dict() for d in mark_docs if d.to_dict().get("Roll") == selected_student]
+marks_df = pd.DataFrame(mark_data) if mark_data else pd.DataFrame(columns=["QuestionID", "Marks"])
+student_df = student_df.merge(marks_df, on="QuestionID", how="left")
+
+# ---------------- STYLING ----------------
+st.markdown("""
+<style>
+div[data-testid="stHorizontalBlock"] { margin-bottom: -6px !important; }
+div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !important; }
+.block-container { padding-top: 1rem; padding-bottom: 1rem; }
+
+.qtext { font-size:16px; font-weight:600; color:#111; margin-bottom:3px; }
+.qresp { font-size:15px; color:#333; margin-top:-4px; margin-bottom:4px; }
+
+.infoblock { 
+    background-color:#f0f8ff; 
+    padding:16px 20px; 
+    border-left:5px solid #007bff;
+    border-radius:10px; 
+    margin:18px 0 20px 0; 
+    font-size:16px; 
+    line-height:1.6;
+    color:#222;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+.info-title {
+    font-size:18px; 
+    font-weight:700; 
+    color:#007bff; 
+    margin-bottom:10px;
+    display: block;
+}
+
+.back-to-top {
+    position: fixed; bottom: 40px; right: 40px;
+    background-color: #007bff; color: white;
+    border: none; padding: 10px 16px;
+    border-radius: 8px; font-weight: 600;
+    cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    z-index: 9999;
+}
+.back-to-top:hover { background-color: #0056b3; }
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------- MARK ENTRY SECTION ----------------
+marks_state = {}
+sections = student_df["Section"].unique().tolist()
+grand_total = 0
+grand_max = 0
+
+# Define CSVs per section
+section_files = {
     "Aptitude Test": "aptitude.csv",
-    "Adaptability & Learning": "adaptability_learning.csv",
+    "Adaptability & Learning": "adaptability_learning.csv", 
     "Communication Skills - Objective": "communcation_skills_objective.csv",
     "Communication Skills - Descriptive": "communcation_skills_descriptive.csv",
 }
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="Student Edge Assessment", layout="wide")
-st.title("🧠 Student Edge Assessment Portal")
+for section in sections:
+    sec_df = student_df[student_df["Section"] == section]
+    st.markdown(f"## 🧾 {section}")
 
-# ---------------- STUDENT DETAILS ----------------
-name = st.text_input("Enter Your Name")
-roll = st.text_input("Enter Roll Number (e.g., 25BBAB170)")
+    # 🧩 Ensure questions follow CSV order
+    if section in section_files:
+        try:
+            csv_df = pd.read_csv(section_files[section])
+            csv_order = csv_df["QuestionID"].dropna().astype(str).tolist()
+            csv_map = {qid: idx for idx, qid in enumerate(csv_order)}
+            sec_df["QuestionID"] = sec_df["QuestionID"].astype(str)
+            sec_df = sec_df.sort_values(by="QuestionID", key=lambda x: x.map(csv_map))
+        except Exception as e:
+            st.warning(f"⚠️ Could not align order for {section}: {e}")
 
-# ---------------- MAIN APP ----------------
-if name and roll:
-    st.success(f"Welcome, {name}! Please choose a test section below.")
-    section = st.selectbox("Select Section", list(files.keys()))
+    # Load reading passages for insertion
+    info_passages = []
+    if section in section_files:
+        try:
+            csv_df = pd.read_csv(section_files[section])
+            info_passages = csv_df[csv_df["Type"] == "info"]["Question"].tolist()
+        except Exception as e:
+            st.warning(f"⚠️ Could not load passages for {section}: {e}")
 
-    if section:
-        df = pd.read_csv(files[section])
-        st.subheader(f"📘 {section}")
-        st.write("Answer all the questions below and click **Submit**.")
+    section_total = 0
+    section_max_marks = len(sec_df)
+    question_counter = 0
 
-        responses = []
+    for idx, row in sec_df.iterrows():
+        qid = row.get("QuestionID", f"auto_{idx}")
+        qtext = row["Question"]
+        response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
+        prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
-        for idx, row in df.iterrows():
-            qid = row.get("QuestionID", f"Q{idx+1}")
-            qtext = str(row.get("Question", "")).strip()
-            qtype = str(row.get("Type", "")).strip().lower()
+        question_counter += 1
 
-            # Instructional info text
-            if qtype == "info":
-                st.markdown(f"### 📝 {qtext}")
-                st.markdown("---")
-                continue
+        # 🎯 Display question and response
+        col1, col2 = st.columns([10, 2])
+        with col1:
+            st.markdown(
+                f"""
+                <div class='qtext'>Q{question_counter}: {qtext}</div>
+                <div class='qresp'>🧩 <i>Student Response:</i> <b>{response}</b></div>
+                """,
+                unsafe_allow_html=True
+            )
+        with col2:
+            marks_state[qid] = st.radio(
+                label="",
+                options=[0, 1],
+                index=prev_mark,
+                horizontal=True,
+                key=f"{selected_student}_{section}_{qid}_{idx}"  # ✅ Unique key
+            )
+            section_total += marks_state[qid]
 
-            st.markdown(f"**Q{idx+1}. {qtext}**")
-
-            # Likert scale
-            if qtype == "likert":
-                scale_min = int(row.get("ScaleMin", 1))
-                scale_max = int(row.get("ScaleMax", 5))
-                response = st.slider(
-                    "Your Response:",
-                    min_value=scale_min,
-                    max_value=scale_max,
-                    value=(scale_min + scale_max) // 2,
-                    key=f"q{idx}"
+        # 📘 Inject reading passage after Q20, Q26, Q32
+        if question_counter in [20, 26, 32]:
+            passage_index = [20, 26, 32].index(question_counter)
+            if passage_index < len(info_passages):
+                passage_text = info_passages[passage_index]
+                st.markdown(
+                    f"""
+                    <div class='infoblock'>
+                        <span class='info-title'>📘 Read the passage and answer the questions below:</span>
+                        {passage_text}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
                 )
 
-            # MCQ
-            elif qtype == "mcq":
-                options = [
-                    str(row.get(f"Option{i}", "")).strip()
-                    for i in range(1, 5)
-                    if pd.notna(row.get(f"Option{i}")) and str(row.get(f"Option{i}")).strip() != ""
-                ]
-                if options:
-                    response = st.radio("Your Answer:", options, key=f"q{idx}")
-                else:
-                    st.warning(f"No options available for {qid}")
-                    response = ""
+    st.markdown(f"**Subtotal for {section}: {section_total}/{section_max_marks}**")
+    st.markdown("---")
 
-            # Short / Descriptive
-            elif qtype == "short":
-                response = st.text_area("Your Answer:", key=f"q{idx}")
+    grand_total += section_total
+    grand_max += section_max_marks
 
-            else:
-                st.info(f"⚠️ Unknown question type '{qtype}' for {qid}.")
-                response = ""
+# ---------------- SAVE BUTTON ----------------
+if st.button("💾 Save All Marks"):
+    for qid, mark in marks_state.items():
+        db.collection("faculty_marks").document(f"{selected_student}_{qid}").set({
+            "Roll": selected_student,
+            "QuestionID": qid,
+            "Marks": int(mark),
+            "Evaluator": "Faculty",
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+    st.success("✅ All marks saved successfully!")
 
-            responses.append({
-                "QuestionID": qid,
-                "Question": qtext,
-                "Response": response,
-                "Type": qtype,
-            })
-            st.markdown("---")
+# ---------------- TOTAL MARKS ----------------
+st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_max}")
 
-        # ---------------- SUBMIT ----------------
-        if st.button("✅ Submit"):
-            with st.spinner("Saving your responses..."):
-                data = {
-                    "Name": name,
-                    "Roll": roll,
-                    "Section": section,
-                    "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "Responses": responses,
-                }
-                db.collection("student_responses").document(
-                    f"{roll}_{section.replace(' ', '_')}"
-                ).set(data)
-
-                st.success("✅ Your responses have been successfully submitted!")
-
-else:
-    st.info("👆 Please enter your Name and Roll Number to start.")
-
-# Add this at the bottom of your existing code:
-
-# Add this at the bottom of your code:
-
-st.markdown("---")
-col1, col2, col3 = st.columns([1, 2, 1])
-
-with col2:
-    st.info("""
-    **To return to the top:**
-    Press `Home` key on your keyboard
-    """)
-
-
-
-
-
-
+# ---------------- BACK TO TOP ----------------
+st.markdown("""
+<a href="#top" class="back-to-top">⬆ Back to Top</a>
+""", unsafe_allow_html=True)
