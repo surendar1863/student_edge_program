@@ -23,7 +23,6 @@ st.title("🎓 Faculty Evaluation Dashboard")
 # ---------------- LOAD STUDENT RESPONSES ----------------
 collection_ref = db.collection("student_responses")
 docs = list(collection_ref.stream())
-
 if not docs:
     st.warning("No student data found in Firestore.")
     st.stop()
@@ -43,10 +42,9 @@ for doc in docs:
             "ScaleMin": r.get("ScaleMin", ""),
             "ScaleMax": r.get("ScaleMax", "")
         })
-
 df = pd.DataFrame(data)
 
-# ---------------- SELECT STUDENT ----------------
+# ---------------- STUDENT SELECTION ----------------
 students = sorted(df["Roll"].unique().tolist())
 selected_student = st.selectbox("Select Student Roll Number", students)
 
@@ -57,61 +55,68 @@ if student_df.empty:
 
 st.subheader(f"📋 Evaluation for {student_df.iloc[0]['Name']} ({selected_student})")
 
-# ---------------- LOAD EXISTING FACULTY MARKS ----------------
+# ---------------- LOAD EXISTING MARKS ----------------
 mark_docs = db.collection("faculty_marks").stream()
 mark_data = [d.to_dict() for d in mark_docs if d.to_dict().get("Roll") == selected_student]
 marks_df = pd.DataFrame(mark_data) if mark_data else pd.DataFrame(columns=["QuestionID", "Marks"])
-
-# Merge existing marks with responses
 student_df = student_df.merge(marks_df, on="QuestionID", how="left")
 
-# ---------------- FACULTY EVALUATION TABLE ----------------
+# ---------------- FLAT EVALUATION TABLE ----------------
 st.markdown("### 🧾 Evaluation Table (1 mark per question)")
-for idx, row in student_df.iterrows():
+st.markdown("""
+<style>
+.qrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid #ddd;
+}
+.qtext {
+    flex: 1;
+    font-weight: 500;
+}
+.qradio {
+    flex-shrink: 0;
+    margin-left: 20px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+marks_state = {}
+for _, row in student_df.iterrows():
     qid = row["QuestionID"]
     qtext = row["Question"]
     qtype = row["Type"]
     resp = row["Response"]
-    minscale = row.get("ScaleMin", "")
-    maxscale = row.get("ScaleMax", "")
-    prev_mark = row.get("Marks", 0)
+    scale_info = f"(Scale {row['ScaleMin']}–{row['ScaleMax']})" if qtype == "likert" else ""
+    prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
-    with st.expander(f"Q{qid}: {qtext}"):
-        if qtype == "likert":
-            st.markdown(f"**Type:** Likert (Scale {minscale}–{maxscale})")
-            st.markdown(f"**Response:** {resp}")
-        elif qtype == "short":
-            st.markdown(f"**Type:** Short Answer")
-            st.info(f"**Student Answer:** {resp}")
-        elif qtype == "mcq":
-            st.markdown(f"**Type:** MCQ Answer**")
-            st.info(f"**Student Answer:** {resp}")
-        else:
-            st.text(f"Type: {qtype}")
+    st.markdown(f"<div class='qrow'><div class='qtext'>Q{qid}: {qtext} {scale_info}</div></div>", unsafe_allow_html=True)
+    mark = st.radio(
+        f"Marks for {qid}", [0, 1],
+        index=prev_mark,
+        horizontal=True,
+        key=f"mark_{qid}"
+    )
+    marks_state[qid] = mark
 
-        mark = st.radio(
-            f"Marks for Q{qid} (1 mark max)", 
-            options=[0, 1],
-            index=int(prev_mark) if pd.notna(prev_mark) else 0,
-            horizontal=True,
-            key=f"mark_{selected_student}_{qid}"
-        )
+# ---------------- SAVE ALL BUTTON ----------------
+if st.button("💾 Save All Marks"):
+    for qid, mark in marks_state.items():
+        db.collection("faculty_marks").document(f"{selected_student}_{qid}").set({
+            "Roll": selected_student,
+            "QuestionID": qid,
+            "Marks": int(mark),
+            "Evaluator": "Faculty",
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+    st.success("✅ All marks saved successfully!")
 
-        if st.button(f"💾 Save Marks for {qid}", key=f"save_{qid}"):
-            db.collection("faculty_marks").document(f"{selected_student}_{qid}").set({
-                "Roll": selected_student,
-                "QuestionID": qid,
-                "Marks": int(mark),
-                "Evaluator": "Faculty",
-                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
-            st.success(f"Saved marks for Question {qid} ✅")
-
-# ---------------- COMPUTE TOTALS ----------------
+# ---------------- TOTAL ----------------
 marks_docs = db.collection("faculty_marks").stream()
 marks_data = [d.to_dict() for d in marks_docs if d.to_dict().get("Roll") == selected_student]
 marks_df = pd.DataFrame(marks_data)
-
 total_marks = marks_df["Marks"].sum() if not marks_df.empty else 0
 max_marks = len(student_df)
 
@@ -136,9 +141,7 @@ st.markdown("""
         box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         z-index: 9999;
     }
-    .back-to-top:hover {
-        background-color: #0056b3;
-    }
+    .back-to-top:hover { background-color: #0056b3; }
     </style>
-    <button class="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'});">⬆ Back to Top</button>
+    <button class="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})">⬆ Back to Top</button>
 """, unsafe_allow_html=True)
