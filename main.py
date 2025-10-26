@@ -29,6 +29,34 @@ files = {
 st.set_page_config(page_title="Student Edge Assessment", layout="wide")
 st.title("🧠 Student Edge Assessment Portal")
 
+# ---------------- BACK TO TOP BUTTON STYLING ----------------
+st.markdown("""
+    <style>
+    .back-to-top {
+        position: fixed;
+        bottom: 40px;
+        right: 40px;
+        background-color: #0066cc;
+        color: white;
+        border: none;
+        padding: 12px 18px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        transition: background-color 0.3s ease;
+        z-index: 9999;
+        display: none;
+    }
+    .back-to-top:hover {
+        background-color: #004a99;
+    }
+    .back-to-top.show {
+        display: block;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # ---------------- STUDENT DETAILS ----------------
 name = st.text_input("Enter Your Name")
 roll = st.text_input("Enter Roll Number (e.g., 24bbab110)")
@@ -120,39 +148,31 @@ else:
 
 # ---------------- BACK TO TOP BUTTON ----------------
 st.markdown("""
-    <style>
-    .back-to-top {
-        position: fixed;
-        bottom: 40px;
-        right: 40px;
-        background-color: #0066cc;
-        color: white;
-        border: none;
-        padding: 12px 18px;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        transition: background-color 0.3s ease;
-        z-index: 9999;
-    }
-    .back-to-top:hover {
-        background-color: #004a99;
-    }
-    </style>
-    <button class="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'});">
-        ⬆️ Back to Top
-    </button>
+    <div id="back-to-top-container">
+        <button class="back-to-top" onclick="scrollToTop()">⬆️ Back to Top</button>
+    </div>
+    
     <script>
+    function scrollToTop() {
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+    
+    // Show/hide button based on scroll position
     window.addEventListener('scroll', function() {
         const button = document.querySelector('.back-to-top');
         if (window.scrollY > 200) {
-            button.style.display = 'block';
+            button.classList.add('show');
         } else {
-            button.style.display = 'none';
+            button.classList.remove('show');
+        }
+    });
+    
+    // Initialize button state
+    document.addEventListener('DOMContentLoaded', function() {
+        const button = document.querySelector('.back-to-top');
+        if (window.scrollY > 200) {
+            button.classList.add('show');
         }
     });
     </script>
 """, unsafe_allow_html=True)
-
-
