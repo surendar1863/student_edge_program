@@ -120,30 +120,22 @@ else:
 
 # Add this at the bottom of your existing code:
 
-st.markdown("---")
-st.markdown("### 🔝 Quick Navigation")
+# Add this at the bottom of your code:
 
-# Simple HTML link that scrolls to top
-st.markdown(
-    """
-    <div style="text-align: center;">
-        <a href="#" style="text-decoration: none;">
-            <button style="
-                background-color: #0066cc;
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                border-radius: 8px;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: bold;
-                width: 200px;
-            ">⬆️ Back to Top</button>
-        </a>
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+st.markdown("---")
+col1, col2, col3 = st.columns([1, 2, 1])
+
+with col2:
+    st.markdown("### 🔝 Navigation Help")
+    st.info("""
+    **To return to the top:**
+    1. Use your browser's scroll bar on the right
+    2. Press `Home` key on your keyboard
+    3. Use mouse wheel to scroll up
+    """)
+    
+    if st.button("⬆️ I understand - clear this message", use_container_width=True):
+        st.success("Message cleared! Use scroll bar to go to top.")
 
 
 
