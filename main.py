@@ -13,15 +13,18 @@ st.title("🧠 Student Edge Assessment Portal")
 # 🔸 If running locally, keep your service account file (e.g., service_account.json) in same folder.
 # 🔸 If running on Streamlit Cloud, paste its content into "Secrets" under [google_service_account].
 
+# ✅ Load service account from Streamlit Secrets
 try:
     service_account_info = st.secrets["google_service_account"]
 except Exception:
-    with open("service_account.json", "r") as f:
+    # Fallback for local testing
+    with open("service_account.json") as f:
         service_account_info = json.load(f)
 
+# ✅ Create authorized gspread client
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/drive",
 ]
 credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
 gc = gspread.authorize(credentials)
@@ -128,3 +131,4 @@ if name and roll:
                 st.success("✅ Responses saved successfully")
 else:
     st.info("👆 Please enter your Name and Roll Number to start.")
+
