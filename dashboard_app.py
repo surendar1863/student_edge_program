@@ -53,8 +53,9 @@ if student_df.empty:
 
 st.subheader(f"📋 Evaluation for {student_df.iloc[0]['Name']} ({selected_student})")
 
-# ---------------- FILTER ONLY LIKERT / SHORT / DESCRIPTIVE ----------------
-eval_df = student_df[student_df["Type"].isin(["likert", "short", "descriptive"])].copy()
+# ---------------- FILTER TYPES ----------------
+# Keep likert, short, descriptive, and info; remove mcq
+eval_df = student_df[student_df["Type"].isin(["likert", "short", "descriptive", "info"])].copy()
 if eval_df.empty:
     st.info("No evaluable questions for this student.")
     st.stop()
@@ -65,15 +66,17 @@ mark_data = [d.to_dict() for d in mark_docs if d.to_dict().get("Roll") == select
 marks_df = pd.DataFrame(mark_data) if mark_data else pd.DataFrame(columns=["QuestionID", "Marks"])
 eval_df = eval_df.merge(marks_df, on="QuestionID", how="left")
 
-# ---------------- GLOBAL STYLING ----------------
+# ---------------- STYLING ----------------
 st.markdown("""
 <style>
-div[data-testid="stHorizontalBlock"] { margin-bottom: -8px !important; }
-div[class*="stRadio"] { margin-top: -10px !important; margin-bottom: -10px !important; }
+div[data-testid="stHorizontalBlock"] { margin-bottom: -6px !important; }
+div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !important; }
 .block-container { padding-top: 1rem; padding-bottom: 1rem; }
 
-.qtext { font-size:16px; font-weight:600; color:#111; }
-.qresp { font-size:16px; color:#333; margin-top:-4px; margin-bottom:-4px; }
+.qtext { font-size:16px; font-weight:600; color:#111; margin-bottom:3px; }
+.qresp { font-size:15px; color:#333; margin-top:-4px; margin-bottom:4px; }
+.infoblock { background-color:#f7f7f7; padding:10px 15px; border-left:5px solid #007bff;
+              border-radius:4px; margin-bottom:10px; font-size:16px; line-height:1.5; }
 
 .back-to-top {
     position: fixed; bottom: 40px; right: 40px;
@@ -89,7 +92,6 @@ div[class*="stRadio"] { margin-top: -10px !important; margin-bottom: -10px !impo
 
 # ---------------- MARK ENTRY SECTION ----------------
 marks_state = {}
-
 sections = eval_df["Section"].unique().tolist()
 grand_total = 0
 grand_max = 0
@@ -97,14 +99,21 @@ grand_max = 0
 for section in sections:
     sec_df = eval_df[eval_df["Section"] == section]
     st.markdown(f"## 🧾 {section}")
-    
+
     section_total = 0
     for idx, row in sec_df.iterrows():
         qid = row["QuestionID"]
         qtext = row["Question"]
+        qtype = row["Type"]
         response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
         prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
+        # If info type — display as paragraph block, no marks
+        if qtype == "info":
+            st.markdown(f"<div class='infoblock'>{qtext}</div>", unsafe_allow_html=True)
+            continue
+
+        # Layout: Question + response + marks (0/1)
         col1, col2 = st.columns([10, 2])
         with col1:
             st.markdown(
@@ -120,15 +129,15 @@ for section in sections:
                 options=[0, 1],
                 index=prev_mark,
                 horizontal=True,
-                key=f"{selected_student}_{section}_{qid}"  # ✅ Unique key fix
+                key=f"{selected_student}_{section}_{qid}"
             )
             section_total += marks_state[qid]
 
-    st.markdown(f"**Subtotal for {section}: {section_total}/{len(sec_df)}**")
+    st.markdown(f"**Subtotal for {section}: {section_total}/{len(sec_df[sec_df['Type']!='info'])}**")
     st.markdown("---")
 
     grand_total += section_total
-    grand_max += len(sec_df)
+    grand_max += len(sec_df[sec_df['Type'] != 'info'])
 
 # ---------------- SAVE BUTTON ----------------
 if st.button("💾 Save All Marks"):
