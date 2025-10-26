@@ -47,10 +47,14 @@ if name and roll:
         for idx, row in df.iterrows():
             qid = row["QuestionID"]
             qtext = row["Question"]
-            qtype = str(row["Type"]).lower()
+            qtype = str(row.get("Type", "")).strip().lower()
             
             st.markdown(f"**Q{idx+1}. {qtext}**")
 
+            if qtype == "info":
+                st.markdown(f"### 📝 {row['Question']}")
+                continue
+                
             # Render Likert scale
             if qtype == "likert":
                 scale_min = int(row.get("ScaleMin", 1))
@@ -97,3 +101,4 @@ if name and roll:
                 st.success("Your responses have been successfully submitted!")
 else:
     st.info("👆 Please enter your Name and Roll Number to start.")
+
