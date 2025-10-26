@@ -54,7 +54,7 @@ if student_df.empty:
 st.subheader(f"📋 Evaluation for {student_df.iloc[0]['Name']} ({selected_student})")
 
 # ---------------- FILTER TYPES ----------------
-# Keep likert, short, descriptive, and info; remove mcq
+# Keep likert, short, descriptive, info; remove mcq
 eval_df = student_df[student_df["Type"].isin(["likert", "short", "descriptive", "info"])].copy()
 if eval_df.empty:
     st.info("No evaluable questions for this student.")
@@ -75,23 +75,15 @@ div[class*="stRadio"] { margin-top: -8px !important; margin-bottom: -8px !import
 
 .qtext { font-size:16px; font-weight:600; color:#111; margin-bottom:3px; }
 .qresp { font-size:15px; color:#333; margin-top:-4px; margin-bottom:4px; }
-.infoblock { 
-    background-color:#f0f8ff; 
-    padding:15px 20px; 
+
+.infoblock {
+    background-color:#f8f9fa;
+    padding:14px 18px;
     border-left:5px solid #007bff;
-    border-radius:6px; 
-    margin-bottom:20px; 
-    font-size:16px; 
-    line-height:1.6;
-    color:#333;
-    font-style: normal;
-}
-.info-title {
-    font-size:18px; 
-    font-weight:700; 
-    color:#007bff; 
-    margin-bottom:8px;
-    display: block;
+    border-radius:6px;
+    margin:8px 0 12px 0;
+    font-size:16px;
+    line-height:1.5;
 }
 
 .back-to-top {
@@ -117,44 +109,26 @@ for section in sections:
     st.markdown(f"## 🧾 {section}")
 
     section_total = 0
-    
-    # Separate info content from gradable questions
-    info_content = sec_df[sec_df["Type"] == "info"]
-    gradable_questions = sec_df[sec_df["Type"] != "info"]
-    
-    section_max_marks = len(gradable_questions)
-    
-    # First display all info content - WITHOUT student responses
-    for idx, row in info_content.iterrows():
-        qtext = row["Question"]
-        st.markdown(
-            f"""
-            <div class='infoblock'>
-                <span class='info-title'>📘 Reading Passage</span>
-                {qtext}
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
-    
-    # Then display gradable questions with marks
-    question_counter = 0
-    for idx, row in gradable_questions.iterrows():
+    q_counter = 1  # For question numbering excluding info
+
+    for _, row in sec_df.iterrows():
         qid = row["QuestionID"]
         qtext = row["Question"]
         qtype = row["Type"]
         response = str(row["Response"]) if pd.notna(row["Response"]) else "(No response)"
         prev_mark = int(row["Marks"]) if not pd.isna(row["Marks"]) else 0
 
-        # Increment question counter
-        question_counter += 1
-        
-        # Layout: Question + response + marks (0/1)
+        # ✅ INFO TYPE → show paragraph (no numbering, no marks)
+        if qtype == "info":
+            st.markdown(f"<div class='infoblock'>{qtext}</div>", unsafe_allow_html=True)
+            continue
+
+        # ✅ Normal questions (likert, short, descriptive)
         col1, col2 = st.columns([10, 2])
         with col1:
             st.markdown(
                 f"""
-                <div class='qtext'>Q{question_counter}: {qtext}</div>
+                <div class='qtext'>Q{q_counter}: {qtext}</div>
                 <div class='qresp'>🧩 <i>Student Response:</i> <b>{response}</b></div>
                 """,
                 unsafe_allow_html=True
@@ -168,12 +142,13 @@ for section in sections:
                 key=f"{selected_student}_{section}_{qid}"
             )
             section_total += marks_state[qid]
+        q_counter += 1  # Only increment for real questions
 
-    st.markdown(f"**Subtotal for {section}: {section_total}/{section_max_marks}**")
+    st.markdown(f"**Subtotal for {section}: {section_total}/{len(sec_df[sec_df['Type']!='info'])}**")
     st.markdown("---")
 
     grand_total += section_total
-    grand_max += section_max_marks
+    grand_max += len(sec_df[sec_df['Type'] != 'info'])
 
 # ---------------- SAVE BUTTON ----------------
 if st.button("💾 Save All Marks"):
@@ -191,21 +166,6 @@ if st.button("💾 Save All Marks"):
 st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_max}")
 
 # ---------------- BACK TO TOP ----------------
-st.markdown("---")
-st.markdown(
-    '''
-    <div style="text-align: center;">
-        <a href="#" style="
-            display: inline-block;
-            background-color: #007bff;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            text-decoration: none;
-            font-weight: bold;
-            margin: 10px 0;
-        ">⬆️ Back to Top</a>
-    </div>
-    ''', 
-    unsafe_allow_html=True
-)
+st.markdown("""
+<a href="#top" class="back-to-top">⬆ Back to Top</a>
+""", unsafe_allow_html=True)
