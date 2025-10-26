@@ -50,7 +50,7 @@ if name and roll:
             qtext = str(row.get("Question", "")).strip()
             qtype = str(row.get("Type", "")).strip().lower()
 
-            # ---- Instructional text only ----
+            # Instructional info text
             if qtype == "info":
                 st.markdown(f"### 📝 {qtext}")
                 st.markdown("---")
@@ -58,7 +58,7 @@ if name and roll:
 
             st.markdown(f"**Q{idx+1}. {qtext}**")
 
-            # ---- Likert scale ----
+            # Likert scale
             if qtype == "likert":
                 scale_min = int(row.get("ScaleMin", 1))
                 scale_max = int(row.get("ScaleMax", 5))
@@ -70,7 +70,7 @@ if name and roll:
                     key=f"q{idx}"
                 )
 
-            # ---- Multiple Choice ----
+            # MCQ
             elif qtype == "mcq":
                 options = [
                     str(row.get(f"Option{i}", "")).strip()
@@ -83,11 +83,10 @@ if name and roll:
                     st.warning(f"No options available for {qid}")
                     response = ""
 
-            # ---- Short / Descriptive ----
+            # Short / Descriptive
             elif qtype == "short":
                 response = st.text_area("Your Answer:", key=f"q{idx}")
 
-            # ---- Unknown / Empty ----
             else:
                 st.info(f"⚠️ Unknown question type '{qtype}' for {qid}.")
                 response = ""
@@ -114,15 +113,15 @@ if name and roll:
                     f"{roll}_{section.replace(' ', '_')}"
                 ).set(data)
 
-                st.success("Your responses have been successfully submitted!")
+                st.success("✅ Your responses have been successfully submitted!")
 
 else:
     st.info("👆 Please enter your Name and Roll Number to start.")
 
-# ---------------- BACK TO TOP BUTTON (Always visible) ----------------
+# ---------------- BACK TO TOP BUTTON (persistent) ----------------
 st.markdown("""
 <style>
-#back-to-top {
+#back-to-top-btn {
     position: fixed;
     bottom: 40px;
     right: 40px;
@@ -134,10 +133,16 @@ st.markdown("""
     font-weight: 600;
     cursor: pointer;
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    z-index: 1000;
+    z-index: 9999;
 }
 </style>
-<button id="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
-    ⬆️ Back to Top
-</button>
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+  const btn = document.createElement('button');
+  btn.id = 'back-to-top-btn';
+  btn.innerText = '⬆️ Back to Top';
+  btn.onclick = function() { window.scrollTo({top: 0, behavior: 'smooth'}); };
+  document.body.appendChild(btn);
+});
+</script>
 """, unsafe_allow_html=True)
