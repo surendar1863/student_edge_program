@@ -31,7 +31,7 @@ st.title("🧠 Student Edge Assessment Portal")
 
 # ---------------- STUDENT DETAILS ----------------
 name = st.text_input("Enter Your Name")
-roll = st.text_input("Enter Roll Number (e.g., 24bbab110)")
+roll = st.text_input("Enter Roll Number (e.g., 25BBAB170)")
 
 # ---------------- MAIN APP ----------------
 if name and roll:
@@ -130,6 +130,7 @@ with col2:
     **To return to the top:**
     Press `Home` key on your keyboard
     """)
+
 
 
 
