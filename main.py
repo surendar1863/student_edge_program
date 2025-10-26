@@ -118,31 +118,41 @@ if name and roll:
 else:
     st.info("👆 Please enter your Name and Roll Number to start.")
 
-# ---------------- BACK TO TOP BUTTON (persistent) ----------------
+# ---------------- BACK TO TOP BUTTON ----------------
 st.markdown("""
-<style>
-#back-to-top-btn {
-    position: fixed;
-    bottom: 40px;
-    right: 40px;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    padding: 12px 18px;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    z-index: 9999;
-}
-</style>
-<script>
-window.addEventListener('DOMContentLoaded', function() {
-  const btn = document.createElement('button');
-  btn.id = 'back-to-top-btn';
-  btn.innerText = '⬆️ Back to Top';
-  btn.onclick = function() { window.scrollTo({top: 0, behavior: 'smooth'}); };
-  document.body.appendChild(btn);
-});
-</script>
+    <style>
+    .back-to-top {
+        position: fixed;
+        bottom: 40px;
+        right: 40px;
+        background-color: #0066cc;
+        color: white;
+        border: none;
+        padding: 12px 18px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        transition: background-color 0.3s ease;
+        z-index: 9999;
+    }
+    .back-to-top:hover {
+        background-color: #004a99;
+    }
+    </style>
+    <button class="back-to-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'});">
+        ⬆️ Back to Top
+    </button>
+    <script>
+    window.addEventListener('scroll', function() {
+        const button = document.querySelector('.back-to-top');
+        if (window.scrollY > 200) {
+            button.style.display = 'block';
+        } else {
+            button.style.display = 'none';
+        }
+    });
+    </script>
 """, unsafe_allow_html=True)
+
+
