@@ -8,8 +8,7 @@ import time
 # ---------------- FIREBASE INIT - FIXED VERSION ----------------
 try:
     # METHOD 1: Use Streamlit secrets (recommended)
-    firebase_config = st.secrets["firebase_key"]
-    
+    firebase_config = st.secrets["google_service_account"]
     # If it's stored as a string, parse it
     if isinstance(firebase_config, str):
         firebase_config = json.loads(firebase_config)
@@ -219,5 +218,6 @@ st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_
 st.markdown("""
 <a href="#top" class="back-to-top">⬆ Back to Top</a>
 """, unsafe_allow_html=True)
+
 
 
