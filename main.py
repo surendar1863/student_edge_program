@@ -1,45 +1,45 @@
 import streamlit as st
 import pandas as pd
-import json
-import time
+import firebase_admin
+from firebase_admin import credentials, firestore
 import gspread
 from google.oauth2.service_account import Credentials
+import time
+import json
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="Student Edge Assessment", layout="wide")
-st.title("🧠 Student Edge Assessment Portal")
-
-# ---------------- GOOGLE SHEETS AUTH ----------------
-# 🔸 If running locally, keep your service account file (e.g., service_account.json) in same folder.
-# 🔸 If running on Streamlit Cloud, paste its content into "Secrets" under [google_service_account].
-
-# ✅ Load service account from Streamlit Secrets
+# ---------------- FIREBASE + GOOGLE AUTH ----------------
 try:
-    service_account_info = st.secrets["google_service_account"]
-except Exception:
-    # Fallback for local testing
-    with open("service_account.json") as f:
-        service_account_info = json.load(f)
-
-# ✅ Create authorized gspread client
-scopes = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
-credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
-gc = gspread.authorize(credentials)
-
-# ---------------- CONNECT TO GOOGLE SHEET ----------------
-# 🔹 Create a Google Sheet named “Student_Responses”
-# 🔹 Share it with your service account email (shown inside your JSON file)
-SHEET_NAME = "Student_Responses"
-try:
-    sheet = gc.open(SHEET_NAME)
-except gspread.SpreadsheetNotFound:
-    st.error(f"❌ Google Sheet '{SHEET_NAME}' not found. Please create it and share with your service account.")
+    firebase_key = dict(st.secrets["google_service_account"])
+    cred = credentials.Certificate(firebase_key)
+except Exception as e:
+    st.error(f"Firebase config error: {e}")
     st.stop()
 
-# ---------------- CSV FILES ----------------
+if not firebase_admin._apps:
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
+# ---------------- GOOGLE SHEETS CONNECTION ----------------
+@st.cache_resource
+def get_google_sheet():
+    try:
+        gc = gspread.service_account_from_dict(st.secrets["google_service_account"])
+        sheet = gc.open("Student_Responses")
+        return sheet
+    except Exception as e:
+        st.error(f"Google Sheets error: {e}")
+        return None
+
+# ---------------- STREAMLIT PAGE ----------------
+st.set_page_config(page_title="Student Edge Assessment Portal", layout="wide")
+st.title("🧠 Student Edge Assessment Portal")
+
+# ---------------- STUDENT DETAILS ----------------
+name = st.text_input("Enter Your Name")
+roll = st.text_input("Enter Roll Number (e.g., 25BBAB170)")
+
+# ---------------- FILES ----------------
 files = {
     "Aptitude Test": "aptitude.csv",
     "Adaptability & Learning": "adaptability_learning.csv",
@@ -47,10 +47,34 @@ files = {
     "Communication Skills - Descriptive": "communcation_skills_descriptive.csv",
 }
 
-# ---------------- STUDENT DETAILS ----------------
-name = st.text_input("Enter Your Name")
-roll = st.text_input("Enter Roll Number (e.g., 25BBAB170)")
+def save_to_google_sheets(data, section):
+    try:
+        sheet = get_google_sheet()
+        if not sheet:
+            return False, "Sheet not found"
 
+        try:
+            worksheet = sheet.worksheet(section)
+        except gspread.exceptions.WorksheetNotFound:
+            worksheet = sheet.add_worksheet(title=section, rows=1000, cols=20)
+            worksheet.append_row(["Timestamp", "Name", "Roll", "Section", "QuestionID", "Question", "Response", "Type"])
+
+        for res in data["Responses"]:
+            worksheet.append_row([
+                data["Timestamp"],
+                data["Name"],
+                data["Roll"],
+                data["Section"],
+                res["QuestionID"],
+                res["Question"],
+                str(res["Response"]),
+                res["Type"]
+            ])
+        return True, "Saved"
+    except Exception as e:
+        return False, str(e)
+
+# ---------------- MAIN LOGIC ----------------
 if name and roll:
     st.success(f"Welcome, {name}! Please choose a test section below.")
     section = st.selectbox("Select Section", list(files.keys()))
@@ -67,68 +91,44 @@ if name and roll:
             qtype = str(row.get("Type", "")).strip().lower()
 
             if qtype == "info":
-                st.markdown(f"### 📘 {qtext}")
+                st.markdown(f"### 📝 {qtext}")
                 st.markdown("---")
                 continue
 
             st.markdown(f"**Q{idx+1}. {qtext}**")
 
-            if qtype == "likert":
-                scale_min = int(row.get("ScaleMin", 1))
-                scale_max = int(row.get("ScaleMax", 5))
-                response = st.slider("Your Response:", min_value=scale_min,
-                                     max_value=scale_max, value=(scale_min + scale_max)//2, key=f"q{idx}")
-
-            elif qtype == "mcq":
+            if qtype == "mcq":
                 options = [str(row.get(f"Option{i}", "")).strip()
-                           for i in range(1, 5)
-                           if pd.notna(row.get(f"Option{i}")) and str(row.get(f"Option{i}")).strip() != ""]
-                response = st.radio("Your Answer:", options, key=f"q{idx}") if options else ""
-
-            elif qtype == "short":
-                response = st.text_area("Your Answer:", key=f"q{idx}")
-
+                           for i in range(1, 5) if pd.notna(row.get(f"Option{i}"))]
+                response = st.radio("Choose:", options, key=f"q{idx}")
+            elif qtype == "likert":
+                response = st.slider("Rate:", 1, 5, 3, key=f"q{idx}")
             else:
-                response = ""
-                st.warning(f"⚠️ Unknown question type '{qtype}'")
+                response = st.text_area("Your Answer:", key=f"q{idx}")
 
             responses.append({
                 "QuestionID": qid,
                 "Question": qtext,
                 "Response": response,
-                "Type": qtype,
+                "Type": qtype
             })
             st.markdown("---")
 
-        # ---------------- SUBMIT ----------------
         if st.button("✅ Submit"):
-            with st.spinner("Saving your responses to Google Sheets..."):
-                # Prepare data
-                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                worksheet_title = section.replace(" ", "_")
-
-                # Get or create a worksheet for this section
-                try:
-                    worksheet = sheet.worksheet(worksheet_title)
-                except gspread.exceptions.WorksheetNotFound:
-                    worksheet = sheet.add_worksheet(title=worksheet_title, rows=1000, cols=20)
-                    worksheet.append_row(["Timestamp", "Name", "Roll", "Section", "QuestionID", "Question", "Response", "Type"])
-
-                # Append responses
-                for r in responses:
-                    row_data = [
-                        timestamp,
-                        name,
-                        roll,
-                        section,
-                        r["QuestionID"],
-                        r["Question"],
-                        str(r["Response"]),
-                        r["Type"]
-                    ]
-                    worksheet.append_row(row_data)
-
-                st.success("✅ Responses saved successfully")
+            with st.spinner("Saving your responses..."):
+                data = {
+                    "Name": name,
+                    "Roll": roll,
+                    "Section": section,
+                    "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "Responses": responses
+                }
+                # Save to Firestore and Sheets
+                db.collection("student_responses").document(f"{roll}_{section.replace(' ', '_')}").set(data)
+                success, msg = save_to_google_sheets(data, section)
+                if success:
+                    st.success("✅ Responses saved to Google Sheets and Firestore successfully!")
+                else:
+                    st.error(f"Error saving to Sheets: {msg}")
 else:
     st.info("👆 Please enter your Name and Roll Number to start.")
-
