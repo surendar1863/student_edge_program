@@ -1,4 +1,4 @@
-﻿QuestionID,Section,Question,OptionA,OptionB,OptionC,OptionD,Correct,Type
+﻿QuestionID,Section,Question,Option1,Option2,Option3,Option4,Correct,Type
 1,Communication Skills Self-Assessment,Which is most important in effective communication?,Grammar,Clarity,Loudness,Vocabulary,Clarity,mcq
 2,Communication Skills Self-Assessment,"When someone doesn’t understand your explanation, you should:",Repeat loudly,Explain in simpler words,Ignore,Change the topic,Explain in simpler words,mcq
 3,Communication Skills Self-Assessment,Active listening means:,Nodding only,Interrupting to show interest,Paying full attention and responding,Avoiding eye contact,Paying full attention and responding,mcq
