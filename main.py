@@ -140,21 +140,13 @@ with col2:
         st.rerun()  # This helps refresh the page
 
 # Alternative: Add a simple anchor link approach
-st.markdown(
-    """
-    <div style='text-align: center; margin-top: 20px;'>
-        <a href='#' style='text-decoration: none;'>
-            <button style='
-                background-color: #0066cc;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-            '>⬆️ Back to Top</button>
-        </a>
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+# ---------------- BACK TO TOP ----------------
+st.markdown("---")
+st.markdown("### 🔝 Quick Navigation")
+
+if st.button("⬆️ Take me to the top of the page", use_container_width=True, type="primary"):
+    # This will refresh the page and start from top
+    st.rerun()
+
+st.markdown("*Click the button above to return to the top*")
+
