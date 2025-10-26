@@ -154,7 +154,4 @@ if st.button("💾 Save All Marks"):
 # ---------------- TOTAL MARKS ----------------
 st.metric(label="🏅 Total Marks (All Sections)", value=f"{grand_total}/{grand_max}")
 
-# ---------------- BACK TO TOP ----------------
-st.markdown("""
-<a href="#top" class="back-to-top">⬆ Back to Top</a>
-""", unsafe_allow_html=True)
+
