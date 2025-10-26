@@ -3,104 +3,97 @@ import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
 import json
+import time
 
-# -------------------------------------------------------------
-# 🔹 Firebase Setup
-# -------------------------------------------------------------
+# ---------------- FIREBASE CONNECTION ----------------
+# Load credentials from Streamlit secrets (on Streamlit Cloud) or local file
+try:
+    firebase_config = json.loads(st.secrets["firebase_key"])
+    cred = credentials.Certificate(firebase_config)
+except Exception:
+    cred = credentials.Certificate("firebase_key.json")
+
+# Initialize Firebase only once
 if not firebase_admin._apps:
-    try:
-        firebase_config = json.loads(st.secrets["firebase_key"])
-        cred = credentials.Certificate(firebase_config)
-        firebase_admin.initialize_app(cred)
-        db = firestore.client()
-    except Exception as e:
-        st.error(f"Firebase initialization failed: {e}")
+    firebase_admin.initialize_app(cred)
+db = firestore.client()
 
-# -------------------------------------------------------------
-# 🔹 File Mapping
-# -------------------------------------------------------------
+# ---------------- CSV FILES ----------------
 files = {
     "Aptitude Test": "aptitude.csv",
     "Adaptability & Learning": "adaptability_learning.csv",
     "Communication Skills - Objective": "communcation_skills_objective.csv",
-    "Communication Skills - Descriptive": "communcation_skills_descriptive.csv"
+    "Communication Skills - Descriptive": "communcation_skills_descriptive.csv",
 }
 
-# -------------------------------------------------------------
-# 🔹 Streamlit UI
-# -------------------------------------------------------------
-st.set_page_config(page_title="Assessment Portal", layout="wide")
-st.title("🎓 Student Assessment Portal")
+# ---------------- APP TITLE ----------------
+st.set_page_config(page_title="Student Edge Assessment", layout="wide")
+st.title("🧠 Student Edge Assessment Portal")
 
+# ---------------- STUDENT DETAILS ----------------
 name = st.text_input("Enter Your Name")
 roll = st.text_input("Enter Roll Number (e.g., 24bbab110)")
 
 if name and roll:
-    st.success(f"Welcome, {name}! Please choose a section to begin.")
+    st.success(f"Welcome, {name}! Please choose a test section below.")
     section = st.selectbox("Select Section", list(files.keys()))
-
+    
     if section:
-        try:
-            df = pd.read_csv(files[section])
-        except FileNotFoundError:
-            st.error(f"❌ File not found for section: {section}")
-        else:
+        df = pd.read_csv(files[section])
+        st.subheader(f"📘 {section}")
+        st.write("Answer all the questions below and click **Submit**.")
+        
+        responses = []
+        for idx, row in df.iterrows():
+            qid = row["QuestionID"]
+            qtext = row["Question"]
+            qtype = str(row["Type"]).lower()
+            
+            st.markdown(f"**Q{idx+1}. {qtext}**")
+
+            # Render Likert scale
+            if qtype == "likert":
+                scale_min = int(row.get("ScaleMin", 1))
+                scale_max = int(row.get("ScaleMax", 5))
+                response = st.slider(
+                    f"Your rating for Q{idx+1}", 
+                    min_value=scale_min, 
+                    max_value=scale_max, 
+                    value=(scale_max + scale_min)//2,
+                    key=f"q{idx}"
+                )
+
+            # Render Multiple Choice
+            elif qtype == "mcq":
+                options = [str(row.get(f"Option{i}")) for i in range(1, 5) if pd.notna(row.get(f"Option{i}"))]
+                response = st.radio(f"Your Answer for Q{idx+1}", options, key=f"q{idx}")
+
+            # Render Short/Descriptive answer
+            elif qtype == "short":
+                response = st.text_area(f"Your Answer for Q{idx+1}", key=f"q{idx}")
+
+            else:
+                response = ""
+
+            responses.append({
+                "QuestionID": qid,
+                "Question": qtext,
+                "Response": response,
+                "Type": qtype,
+            })
             st.markdown("---")
-            st.subheader(f"📘 {section}")
 
-            responses = {}
-            score = 0
-
-            for idx, row in df.iterrows():
-                q = row["Question"]
-                st.markdown(f"**Q{idx+1}. {q}**")
-
-                # ---------------------------------------------------------
-                # APTITUDE + COMMUNICATION OBJECTIVE (MCQ)
-                # ---------------------------------------------------------
-                if "A" in df.columns and not pd.isna(row.get("A", "")):
-                    options = [row["A"], row["B"], row["C"], row["D"]]
-                    answer = st.radio(f"Your answer for Q{idx+1}", options, key=f"q{idx}")
-                    responses[q] = answer
-
-                    correct = str(row.get("Correct", "")).strip()
-                    if correct and answer == correct:
-                        score += 1
-
-                # ---------------------------------------------------------
-                # ADAPTABILITY (LIKERT SCALE)
-                # ---------------------------------------------------------
-                elif "Likert" in df.columns or "Scale" in section:
-                    rating = st.radio(
-                        "Your response:",
-                        ["1 – Strongly Disagree", "2 – Disagree", "3 – Neutral", "4 – Agree", "5 – Strongly Agree"],
-                        key=f"l{idx}",
-                    )
-                    responses[q] = rating
-
-                # ---------------------------------------------------------
-                # DESCRIPTIVE QUESTIONS
-                # ---------------------------------------------------------
-                else:
-                    text = st.text_area(f"Your Answer for Q{idx+1}", key=f"t{idx}")
-                    responses[q] = text
-
-            # -------------------------------------------------------------
-            # 🔹 Submit Button
-            # -------------------------------------------------------------
-            if st.button("✅ Submit Responses"):
-                try:
-                    doc_ref = db.collection("student_responses").document(roll)
-                    doc_ref.set({
-                        "Name": name,
-                        "Roll": roll,
-                        "Section": section,
-                        "Score": int(score),
-                        "Responses": responses
-                    })
-                    st.success(f"✅ Responses submitted successfully! Your Score")
-                except Exception as e:
-                    st.error(f"⚠️ Error saving data: {e}")
-
+        # ---------------- SUBMIT ----------------
+        if st.button("✅ Submit"):
+            with st.spinner("Saving your responses..."):
+                data = {
+                    "Name": name,
+                    "Roll": roll,
+                    "Section": section,
+                    "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "Responses": responses,
+                }
+                db.collection("student_responses").document(roll + "_" + section.replace(" ", "_")).set(data)
+                st.success("Your responses have been successfully submitted!")
 else:
-    st.info("Please enter your Name and Roll Number to begin.")
+    st.info("👆 Please enter your Name and Roll Number to start.")
