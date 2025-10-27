@@ -2,100 +2,92 @@ import streamlit as st
 import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
-import gspread
-import json
 import time
+import json
+import re
 
-# --------------------------------------------------------------------
-# 🔹 FIREBASE + GOOGLE SHEETS INITIALIZATION
-# --------------------------------------------------------------------
-try:
-    firebase_key = dict(st.secrets["google_service_account"])
-    cred = credentials.Certificate(firebase_key)
-except Exception as e:
-    st.warning(f"⚠️ Streamlit secrets not found: {e}")
-    cred = credentials.Certificate("firebase_key.json")
+import streamlit as st
 
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred)
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(page_title="SKILL - 2025", layout="wide")
+st.title("🧠 SKILL - 2025")
 
-db = firestore.client()
-
+# ---------------- FIREBASE CONNECTION ----------------
 @st.cache_resource
-def get_google_sheet():
+def init_firebase():
     try:
-        gc = gspread.service_account_from_dict(st.secrets["google_service_account"])
-        return gc.open("Student_Responses")
+        if not firebase_admin._apps:
+            # ✅ Use secrets when deployed on Streamlit Cloud
+            if "firebase" in st.secrets:
+                firebase_config = dict(st.secrets["firebase"])
+                cred = credentials.Certificate(firebase_config)
+                firebase_admin.initialize_app(cred)
+            else:
+                # ✅ Only used locally when secrets aren't available
+                st.warning("⚠️ Using local firebase_key.json (not found on cloud).")
+                import json
+                with open("firebase_key.json", "r", encoding="utf-8") as f:
+                    firebase_config = json.load(f)
+                cred = credentials.Certificate(firebase_config)
+                firebase_admin.initialize_app(cred)
+
+        return firestore.client()
     except Exception as e:
-        st.error(f"Google Sheets access error: {e}")
+        st.error(f"❌ Firebase initialization failed: {e}")
         return None
 
+db = init_firebase()
 
-# --------------------------------------------------------------------
-# 🔹 PAGE SETTINGS
-# --------------------------------------------------------------------
-st.set_page_config(page_title="Student Edge Assessment Portal", layout="wide")
-st.title("🧠 Student Edge Assessment Portal")
-
-# --------------------------------------------------------------------
-# 🔹 LOAD CSV SECTIONS
-# --------------------------------------------------------------------
+# ---------------- CSV FILES ----------------
 files = {
     "Aptitude Test": "aptitude.csv",
     "Adaptability & Learning": "adaptability_learning.csv",
-    "Communication Skills - Objective": "communcation_skills_objective.csv",
-    "Communication Skills - Descriptive": "communcation_skills_descriptive.csv",
+    "Communication Skills - Objective": "communication_skills_objective.csv",
+    "Communication Skills - Descriptive": "communication_skills_descriptive.csv",
 }
 
-# --------------------------------------------------------------------
-# 🔹 SAVE FUNCTIONS
-# --------------------------------------------------------------------
-def save_to_firestore(data):
-    """Save student responses to Firebase Firestore"""
-    try:
-        doc_name = f"{data['Roll']}_{data['Section'].replace(' ', '_')}"
-        db.collection("student_responses").document(doc_name).set(data)
-        return True
-    except Exception as e:
-        st.error(f"Firestore save error: {e}")
+# ---- inputs ----
+name = st.text_input("Enter Your Name (letters only)", value="")
+roll  = st.text_input("Enter Roll Number (e.g., 25BBAB001)", value="")
+
+# ---- validator (must be defined before you use it) ----
+def valid_name(n: str) -> bool:
+    if not isinstance(n, str):
         return False
-
-
-def save_to_google_sheets(data):
-    """Save student responses to Google Sheet"""
-    try:
-        sheet = get_google_sheet()
-        if not sheet:
-            return False
-
-        try:
-            ws = sheet.worksheet(data["Section"])
-        except gspread.exceptions.WorksheetNotFound:
-            ws = sheet.add_worksheet(title=data["Section"], rows=1000, cols=20)
-            ws.append_row(["Timestamp", "Name", "Roll", "Section", "QuestionID", "Question", "Response", "Type"])
-
-        for resp in data["Responses"]:
-            ws.append_row([
-                data["Timestamp"], data["Name"], data["Roll"], data["Section"],
-                resp["QuestionID"], resp["Question"], str(resp["Response"]), resp["Type"]
-            ])
-        return True
-    except Exception as e:
-        st.error(f"Google Sheets error: {e}")
+    n = n.strip()
+    if not n:
         return False
+    # letters + single spaces between words (no digits/symbols)
+    return bool(re.fullmatch(r"[A-Za-z]+(?: [A-Za-z]+)*", n))
+
+name_ok = valid_name(name)
+
+# live feedback
+if name and not name_ok:
+    st.error("Name should contain only letters and spaces (e.g., 'Ravi Kumar').")
+
+# normalized title case, if you want to save/display neatly
+clean_name = " ".join(part.capitalize() for part in name.split()) if name_ok else name
 
 
-# --------------------------------------------------------------------
-# 🔹 STUDENT INPUT
-# --------------------------------------------------------------------
-name = st.text_input("Enter Your Name")
-roll = st.text_input("Enter Roll Number (e.g., 25BBAB170)")
-
+# ---------------- MAIN APP ----------------
 if name and roll:
+    st.success(f"Welcome, {name}! Please Choose a Test in the Dropdown Below.")
     section = st.selectbox("Select Section", list(files.keys()))
+    
+    if section == "Communication Skills - Descriptive":
+        st.info("📝 Q1 to Q10 - Find the error and correct the sentence.")
+               
     if section:
-        df = pd.read_csv(files[section])
+        try:
+            df = pd.read_csv(files[section])
+        except FileNotFoundError:
+            st.error(f"❌ File '{files[section]}' not found. Please check the file name.")
+            st.stop()
+
         st.subheader(f"📘 {section}")
+        st.write("Answer all the questions below and click **Submit**.")
+
         responses = []
 
         for idx, row in df.iterrows():
@@ -103,48 +95,141 @@ if name and roll:
             qtext = str(row.get("Question", "")).strip()
             qtype = str(row.get("Type", "")).strip().lower()
 
+            # ---- Instructional text only ----
             if qtype == "info":
-                st.markdown(f"### 📘 {qtext}")
-                st.divider()
+                st.markdown(f"### 📝 {qtext}")
+                st.markdown("---")
                 continue
 
             st.markdown(f"**Q{idx+1}. {qtext}**")
 
+            # ---- Likert scale ----
             if qtype == "likert":
-                response = st.slider("Your Response", 1, 5, 3, key=f"{qid}")
+                scale_min = int(row.get("ScaleMin", 1))
+                scale_max = int(row.get("ScaleMax", 5))
+                response = st.slider(
+                    "Your Response:",
+                    min_value=scale_min,
+                    max_value=scale_max,
+                    value=(scale_min + scale_max) // 2,
+                    key=f"q{idx}_{section}"
+                )
+
+            # ---- Multiple Choice ----
             elif qtype == "mcq":
-                options = [str(row.get(f"Option{i}", "")).strip() for i in range(1, 5) if pd.notna(row.get(f"Option{i}"))]
-                response = st.radio("Your Answer", options, key=f"{qid}")
+                options = [
+                    str(row.get(f"Option{i}", "")).strip()
+                    for i in range(1, 5)
+                    if pd.notna(row.get(f"Option{i}")) and str(row.get(f"Option{i}")).strip() != ""
+                ]
+                if options:
+                    response = st.radio("Your Answer:", options, key=f"q{idx}_{section}")
+                else:
+                    st.warning(f"No options available for {qid}")
+                    response = ""
+
+            # ---- Short / Descriptive ----
             elif qtype == "short":
-                response = st.text_area("Your Answer", key=f"{qid}")
+                response = st.text_area("Your Answer:", key=f"q{idx}_{section}")
+
+            # ---- Unknown / Empty ----
             else:
+                st.info(f"⚠️ Unknown question type '{qtype}' for {qid}.")
                 response = ""
 
             responses.append({
                 "QuestionID": qid,
                 "Question": qtext,
                 "Response": response,
-                "Type": qtype
+                "Type": qtype,
             })
             st.markdown("---")
 
+        # ---------------- SUBMIT ----------------
         if st.button("✅ Submit"):
-            with st.spinner("Saving your responses..."):
-                data = {
-                    "Name": name,
-                    "Roll": roll,
-                    "Section": section,
-                    "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "Responses": responses
-                }
-                f_ok = save_to_firestore(data)
-                s_ok = save_to_google_sheets(data)
+            if not db:
+                st.error("❌ Database connection failed. Cannot save responses.")
+            else:
+                with st.spinner("Saving your responses..."):
+                    data = {
+                        "Name": name,
+                        "Roll": roll,
+                        "Section": section,
+                        "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "Responses": responses,
+                    }
+                    try:
+                        # ✅ Use document ID based on roll and section
+                        doc_ref = db.collection("student_responses").document(
+                            f"{roll}_{section.replace(' ', '_')}"
+                        )
+        
+                        # ✅ This will overwrite the same document instead of creating a duplicate
+                        doc_ref.set(data, merge=True)
+        
+                        st.success("✅ Your responses have been successfully submitted (updated if existing)!")
+                    except Exception as e:
+                        st.error(f"❌ Error saving to database: {e}")
+    st.markdown(
+        "<p style='color:#007BFF; font-weight:600;'>⌨️ Press <b>Home</b> on the keyboard to return to the top of the page.</p>",
+        unsafe_allow_html=True,
+    )
 
-                if f_ok and s_ok:
-                    st.success("✅ Responses saved to Firestore and Google Sheets successfully!")
-                elif f_ok:
-                    st.warning("⚠️ Saved only to Firestore. Google Sheets upload failed.")
-                else:
-                    st.error("❌ Failed to save data. Please retry.")
 else:
     st.info("👆 Please enter your Name and Roll Number to start.")
+
+# Tighten top spacing so title & fields sit higher
+st.markdown("""
+<style>
+/* Pull the whole page content up a bit */
+div.block-container {
+    padding-top: 2.0rem;      /* default is ~6rem; lower = higher on the page */
+    padding-bottom: 1.5rem;   /* optional */
+}
+
+/* Nudge the h1 title if you want it even closer to the top */
+h1, .stTitle {
+    margin-top: -0.2rem;      /* make more negative to move further up */
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
